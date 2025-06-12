@@ -1,13 +1,15 @@
 package entity
 
 import (
+	"encoding/json"
+	"fmt"
 	"time"
 
-	"github.com/gofrs/uuid"
 	"github.com/golang-jwt/jwt/v5"
+	"github.com/google/uuid"
 )
 
-type UserID = uuid.UUID
+type UserID uuid.UUID
 
 type Project struct {
 	ID        int       `json:"id"`
@@ -106,4 +108,28 @@ type GoodsListResponse struct {
 type URLParams struct {
 	ID        int `json:"id"`
 	ProjectID int `json:"projectId"`
+}
+
+func unmarshalUUID(id *uuid.UUID, data []byte) error {
+	var s string
+	if err := json.Unmarshal(data, &s); err != nil {
+		return fmt.Errorf("unmarshalling error: %w", err)
+	}
+
+	parsed, err := uuid.Parse(s)
+	if err != nil {
+		return ErrInvalidUUIDFormat
+	}
+
+	*id = parsed
+
+	return nil
+}
+
+func (u *UserID) UnmarshalText(data []byte) error {
+	return unmarshalUUID((*uuid.UUID)(u), data)
+}
+
+func (u UserID) MarshalText() ([]byte, error) {
+	return json.Marshal(uuid.UUID(u).String())
 }

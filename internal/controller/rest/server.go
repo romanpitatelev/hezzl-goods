@@ -61,9 +61,11 @@ func New(
 			r.Use(s.jwtAuth)
 
 			r.Post("/good/create", s.goodsHandler.CreateGood)
+			r.Get("/good/get", s.goodsHandler.GetGood)
 			r.Patch("/good/update", s.goodsHandler.UpdateGood)
 			r.Delete("/good/remove", s.goodsHandler.DeleteGood)
 			r.Get("goods/list", s.goodsHandler.GetGoods)
+			r.Patch("/good/repriotitize", s.goodsHandler.Reprioritize)
 		})
 	})
 

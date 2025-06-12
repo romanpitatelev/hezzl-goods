@@ -64,7 +64,13 @@ type PriorityRequest struct {
 	NewPriority int `json:"newPriority"`
 }
 
+type Priority struct {
+	ID       int `json:"id"`
+	Priority int `json:"priority"`
+}
+
 type PriorityResponse struct {
+	Priorities []Priority `json:"prioroties"`
 }
 
 type Claims struct {

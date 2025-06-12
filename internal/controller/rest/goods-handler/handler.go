@@ -57,7 +57,40 @@ func (h *Handler) CreateGood(w http.ResponseWriter, r *http.Request) {
 	common.OkResponse(w, http.StatusOK, createdGood)
 }
 
-func (h *Handler) GetGood(w http.ResponseWriter, r *http.Request) {}
+func (h *Handler) GetGood(w http.ResponseWriter, r *http.Request) {
+	queryParams := r.URL.Query()
+
+	idStr := queryParams.Get("id")
+	projectIDStr := queryParams.Get("projectId")
+	if idStr == "" || projectIDStr == "" {
+		http.Error(w, "empty good id or project id", http.StatusBadRequest)
+	}
+
+	id, err := strconv.Atoi(idStr)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusBadRequest)
+
+		return
+	}
+
+	projectID, err := strconv.Atoi(projectIDStr)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusBadRequest)
+
+		return
+	}
+
+	ctx := r.Context()
+
+	good, err := h.goodsService.GetGood(ctx, id, projectID)
+	if err != nil {
+		common.ErrorResponse(w, "error getting good", err)
+
+		return
+	}
+
+	common.OkResponse(w, http.StatusOK, good)
+}
 
 func (h *Handler) UpdateGood(w http.ResponseWriter, r *http.Request) {
 	queryParams := r.URL.Query()
@@ -139,14 +172,6 @@ func (h *Handler) DeleteGood(w http.ResponseWriter, r *http.Request) {
 func (h *Handler) GetGoods(w http.ResponseWriter, r *http.Request) {
 	request := common.GetListRequest(r)
 
-	if request.Limit <= 0 {
-		request.Limit = 10
-	}
-
-	if request.Offset < 0 {
-		request.Offset = 0
-	}
-
 	ctx := r.Context()
 
 	goods, err := h.goodsService.GetGoods(ctx, request)
@@ -159,4 +184,44 @@ func (h *Handler) GetGoods(w http.ResponseWriter, r *http.Request) {
 	common.OkResponse(w, http.StatusOK, goods)
 }
 
-func (h *Handler) Reprioritize(w http.ResponseWriter, r *http.Request) {}
+func (h *Handler) Reprioritize(w http.ResponseWriter, r *http.Request) {
+	queryParams := r.URL.Query()
+
+	idStr := queryParams.Get("id")
+	projectIDStr := queryParams.Get("projectId")
+	if idStr == "" || projectIDStr == "" {
+		http.Error(w, "empty good id or project id", http.StatusBadRequest)
+	}
+
+	id, err := strconv.Atoi(idStr)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusBadRequest)
+
+		return
+	}
+
+	projectID, err := strconv.Atoi(projectIDStr)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusBadRequest)
+
+		return
+	}
+
+	var req entity.PriorityRequest
+	if err = json.NewDecoder(r.Body).Decode(&req); err != nil {
+		http.Error(w, "error decoding request body", http.StatusBadRequest)
+
+		return
+	}
+
+	ctx := r.Context()
+
+	response, err := h.goodsService.Reprioritize(ctx, id, projectID, req)
+	if err != nil {
+		common.ErrorResponse(w, "error reprioritizing good", err)
+
+		return
+	}
+
+	common.OkResponse(w, http.StatusOK, response)
+}

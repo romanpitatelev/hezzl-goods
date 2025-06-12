@@ -60,7 +60,35 @@ RETURNING id, project_id, name, COALESCE(description, ''), priority, removed, cr
 	return good, nil
 }
 
-func (r *Repo) GetGood(ctx context.Context, id int, projectID int) (entity.Good, error)
+func (r *Repo) GetGood(ctx context.Context, id int, projectID int) (entity.Good, error) {
+	var good entity.Good
+
+	query := `
+SELECT id, project_id, name, COALESCE(description, ''), priority, removed, created_at
+FROM goods
+WHERE id = $1 AND project_id = $2
+	
+`
+	row := r.db.GetTXFromContext(ctx).QueryRow(ctx, query, id, projectID)
+
+	err := row.Scan(
+		&good.ID,
+		&good.ProjectID,
+		&good.Name,
+		&good.Description,
+		&good.Priority,
+		&good.Removed,
+		&good.CreatedAt,
+	)
+	if err != nil {
+		if err == pgx.ErrNoRows {
+			return entity.Good{}, entity.ErrGoodNotFound
+		}
+		return entity.Good{}, fmt.Errorf("failed to scan good: %w", err)
+	}
+
+	return good, nil
+}
 
 func (r *Repo) UpdateGood(ctx context.Context, id int, projectID int, goodUpdate entity.GoodUpdate) (entity.Good, error) {
 	var good entity.Good
@@ -147,8 +175,7 @@ RETURNING id, project_id, removed
 		err := row.Scan(
 			&response.ID,
 			&response.CampaignID,
-			&response.Removed,
-		)
+			&response.Removed)
 		if err != nil {
 			return fmt.Errorf("failed to scan deleted good: %w", err)
 		}
@@ -218,4 +245,78 @@ func (r *Repo) GetGoods(ctx context.Context, request entity.ListRequest) ([]enti
 	return goods, meta, nil
 }
 
-func (r *Repo) Reprioritize(ctx context.Context, id int, project_id int, new_priority entity.PriorityRequest) (entity.PriorityResponse, error)
+func (r *Repo) Reprioritize(ctx context.Context, id int, projectID int, newPriority entity.PriorityRequest) ([]entity.Priority, error) {
+	var updatedPriorities []entity.Priority
+
+	err := r.db.WithinTransaction(ctx, func(ctx context.Context, tx store.Transaction) error {
+		var currentPriority int
+		err := tx.QueryRow(ctx,
+			`SELECT priority FROM goods
+			WHERE id = $1 AND project_id = $2
+			FOR UPDATE`,
+			id, projectID,
+		).Scan(&currentPriority)
+		if err != nil {
+			if err == pgx.ErrNoRows {
+				return entity.ErrGoodNotFound
+			}
+
+			return fmt.Errorf("failed to get current priority: %w", err)
+		}
+
+		if currentPriority == newPriority.NewPriority {
+			updatedPriorities = append(updatedPriorities, entity.Priority{
+				ID:       id,
+				Priority: newPriority.NewPriority,
+			})
+			return nil
+		}
+
+		var updateQuery string
+		if newPriority.NewPriority < currentPriority {
+			updateQuery = `
+UPDATE goods
+SET priority = priority + 1
+WHERE priority > $1 AND priority <= $2
+RETURNING id, priority
+`
+		}
+
+		rows, err := tx.Query(ctx, updateQuery, newPriority.NewPriority, currentPriority)
+		if err != nil {
+			return fmt.Errorf("failed to update priorities: %w", err)
+		}
+		defer rows.Close()
+
+		for rows.Next() {
+			var p entity.Priority
+			if err := rows.Scan(&p.ID, &p.Priority); err != nil {
+				return fmt.Errorf("failed to scan updated priority: %w", err)
+			}
+
+			updatedPriorities = append(updatedPriorities, p)
+		}
+
+		_, err = tx.Exec(ctx, `
+			UPDATE goods
+			SET priority = $1
+			WHERE id = $2 AND project_id = $3`,
+			newPriority.NewPriority, id, projectID)
+		if err != nil {
+			return fmt.Errorf("failed to update target priority: %w", err)
+		}
+
+		updatedPriorities = append(updatedPriorities, entity.Priority{
+			ID:       id,
+			Priority: newPriority.NewPriority,
+		})
+
+		return nil
+	})
+
+	if err != nil {
+		return nil, fmt.Errorf("failed to reprioritize: %w", err)
+	}
+
+	return updatedPriorities, nil
+}

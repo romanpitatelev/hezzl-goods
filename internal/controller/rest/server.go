@@ -23,30 +23,24 @@ type Config struct {
 }
 
 type Server struct {
-	cfg    Config
-	server *http.Server
-	// usersHandler usersHandler
-	// taskHandler  taskHandler
-	key *rsa.PublicKey
+	cfg          Config
+	server       *http.Server
+	goodsHandler goodsHandler
+	key          *rsa.PublicKey
 }
 
-// type usersHandler interface {
-// 	GetUser(w http.ResponseWriter, r *http.Request)
-// 	UpdateUser(w http.ResponseWriter, r *http.Request)
-// 	DeleteUser(w http.ResponseWriter, r *http.Request)
-// 	GetUsers(w http.ResponseWriter, r *http.Request)
-// 	GetTopUsers(w http.ResponseWriter, r *http.Request)
-// }
-
-// type taskHandler interface {
-// 	Task(w http.ResponseWriter, r *http.Request)
-// 	ReferralTask(w http.ResponseWriter, r *http.Request)
-// }
+type goodsHandler interface {
+	CreateGood(w http.ResponseWriter, r *http.Request)
+	GetGood(w http.ResponseWriter, r *http.Request)
+	UpdateGood(w http.ResponseWriter, r *http.Request)
+	DeleteGood(w http.ResponseWriter, r *http.Request)
+	GetGoods(w http.ResponseWriter, r *http.Request)
+	Reprioritize(w http.ResponseWriter, r *http.Request)
+}
 
 func New(
 	cfg Config,
-	// usersHandler usersHandler,
-	// taskHandler taskHandler,
+	goodsHandler goodsHandler,
 	key *rsa.PublicKey,
 ) *Server {
 	router := chi.NewRouter()
@@ -57,9 +51,8 @@ func New(
 			Handler:           router,
 			ReadHeaderTimeout: readHeaderTimeoutValue,
 		},
-		// usersHandler: usersHandler,
-		// taskHandler:  taskHandler,
-		key: key,
+		goodsHandler: goodsHandler,
+		key:          key,
 	}
 
 	router.Route("/api", func(r chi.Router) {
@@ -67,13 +60,8 @@ func New(
 			r.Use(middleware.Recoverer)
 			r.Use(s.jwtAuth)
 
-			// r.Get("/users/{id}/status", s.usersHandler.GetUser)
-			// r.Patch("/users/{id}", s.usersHandler.UpdateUser)
-			// r.Delete("/users/{id}", s.usersHandler.DeleteUser)
-			// r.Get("/users", s.usersHandler.GetUsers)
-			// r.Get("/users/leaderboard", s.usersHandler.GetTopUsers)
-			// r.Post("/users/{id}/task/complete", s.taskHandler.Task)
-			// r.Post("/users/{id}/referrer", s.taskHandler.ReferralTask)
+			r.Post("/good/create", s.goodsHandler.CreateGood)
+			r.Patch("/good/update", s.goodsHandler.UpdateGood)
 		})
 	})
 

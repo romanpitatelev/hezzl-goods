@@ -17,7 +17,13 @@ type Config struct {
 	LogLevel string `env:"LOG_Level" env-default:"debug" env-description:"Log level"`
 
 	BindAddress string `env:"BIND_ADDRESS" env-default:":8081" env-description:"Bind address"`
-	PostgresDSN string `env:"POSTGRES_DSN" env-default:"postgresql://postgres:my_pass@localhost:5432/denet_db" env-description:"PostgreSQL DSN"`
+	PostgresDSN string `env:"POSTGRES_DSN" env-default:"postgresql://postgres:my_pass@localhost:5432/hezzl_db" env-description:"PostgreSQL DSN"`
+
+	ClickHouseDSN      string `env:"CLICKHOUSE_DSN" env-default:"tcp://localhost:9000?database=hezzle_logs" env-description:"ClickHouse DSN"`
+	ClickHouseDatabase string `env:"CLICKHOUSE_DATABASE" env-default:"hezzle_logs" env-description:"ClickHouse database name"`
+
+	NATSURL     string `env:"NATS_URL" env-default:"nats://localhost:4222"`
+	NATSSubject string `env:"NATS_SUBJECT" env-default:"goods.logs"`
 }
 
 func findConfigFile() bool {

@@ -98,12 +98,12 @@ func (d *DataStore) Migrate(direction migrate.MigrationDirection) error {
 	return nil
 }
 
-func (d *DataStore) UpsertUser(ctx context.Context, user entity.User) error {
+func (d *DataStore) UpsertUser(ctx context.Context, user entity.UserInfo) error {
 	query := `
-INSERT INTO users (id, name, email, role, points)
-VALUES ($1, $2, $3, $4, $5)`
+INSERT INTO users (id, email, role)
+VALUES ($1, $2, $3)`
 
-	_, err := d.pool.Exec(ctx, query, user.ID, user.Name, user.Email, user.Role, user.Points)
+	_, err := d.pool.Exec(ctx, query, user.ID, user.Email, user.Role)
 	if err != nil {
 		return fmt.Errorf("failed to upsert user: %w", err)
 	}

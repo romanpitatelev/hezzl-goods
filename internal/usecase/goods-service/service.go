@@ -83,6 +83,7 @@ func (s *Service) GetGood(ctx context.Context, id int, projectID int) (entity.Go
 
 	cacheKey := fmt.Sprintf("good:%d:%d", id, projectID)
 	cached, err := s.redisClient.Get(ctx, cacheKey)
+
 	if err == nil && cached != "" {
 		var good entity.Good
 		if err := json.Unmarshal([]byte(cached), &good); err == nil {
@@ -215,6 +216,7 @@ func (s *Service) GetGoods(ctx context.Context, request entity.ListRequest) (ent
 
 	cacheKey := fmt.Sprintf("goods:list:%d:%d", request.Limit, request.Offset)
 	cached, err := s.redisClient.Get(ctx, cacheKey)
+
 	if err != nil && cached != "" {
 		var response entity.GoodsListResponse
 		if err := json.Unmarshal([]byte(cached), &response); err == nil {
@@ -262,6 +264,7 @@ func (s *Service) Reprioritize(ctx context.Context, id int, projectID int, req e
 	for _, p := range updatedPriorities {
 		cacheKeys = append(cacheKeys, fmt.Sprintf("good:%d:%d", p.ID, projectID))
 	}
+
 	cacheKeys = append(cacheKeys, "goods:list:*")
 
 	if err := s.redisClient.Del(ctx, cacheKeys...); err != nil {

@@ -24,6 +24,10 @@ type Config struct {
 
 	NATSURL     string `env:"NATS_URL" env-default:"nats://localhost:4222"`
 	NATSSubject string `env:"NATS_SUBJECT" env-default:"goods.logs"`
+
+	RedisAddr     string `env:"REDIS_ADDR" env-default:"localhost:6379" env-description:"Redis address"`
+	RedisPassword string `env:"REDIS_PASSWORD" env-default:"" env-description:"Redis password"`
+	RedisDB       int    `env:"REDIS_DB" env-default:"0" env-description:"Redis database number"`
 }
 
 func findConfigFile() bool {

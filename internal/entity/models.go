@@ -46,7 +46,7 @@ type GoodLog struct {
 	Description string    `json:"description"`
 	Priority    int       `json:"priority"`
 	Removed     bool      `json:"removed"`
-	EventTime   time.Time `json:"event_time"`
+	EventTime   time.Time `json:"evenTime"`
 }
 
 type GoodUpdate struct {
@@ -70,7 +70,7 @@ type Priority struct {
 }
 
 type PriorityResponse struct {
-	Priorities []Priority `json:"prioroties"`
+	Priorities []Priority `json:"priorities"`
 }
 
 type Claims struct {
@@ -101,4 +101,9 @@ type Meta struct {
 type GoodsListResponse struct {
 	Meta  Meta   `json:"meta"`
 	Goods []Good `json:"goods"`
+}
+
+type URLParams struct {
+	ID        int `json:"id"`
+	ProjectID int `json:"projectId"`
 }

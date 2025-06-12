@@ -21,6 +21,7 @@ import (
 	migrate "github.com/rubenv/sql-migrate"
 )
 
+//nolint:funlen
 func Run(cfg *configs.Config) error {
 	ctx, cancel := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
 	defer cancel()
@@ -71,6 +72,7 @@ func Run(cfg *configs.Config) error {
 	if err != nil {
 		log.Panic().Err(err).Msg("failed to connect to Redis")
 	}
+
 	defer func() {
 		if err := redisClient.Close(); err != nil {
 			log.Warn().Err(err).Msg("error closing Redis connection")

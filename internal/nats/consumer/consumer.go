@@ -12,7 +12,10 @@ import (
 	"github.com/rs/zerolog/log"
 )
 
-const defaultBatchSize = 100
+const (
+	defaultBatchSize = 100
+	defaultTimout    = 5 * time.Second
+)
 
 type NATSConsumer struct {
 	clickhouseStore *store.ClickHouseStore
@@ -30,7 +33,7 @@ func New(natsConn *nats.Conn, clickhouseStore *store.ClickHouseStore) *NATSConsu
 	}
 
 	go func() {
-		nc.processBatch(5 * time.Second)
+		nc.processBatch(defaultTimout)
 	}()
 
 	return nc
@@ -47,11 +50,13 @@ func (nc *NATSConsumer) Subscribe() error {
 
 		nc.batchMutex.Lock()
 		nc.batch = append(nc.batch, logMsg)
+
 		if len(nc.batch) >= nc.batchSize {
 			nc.flushBatch()
 		}
 		nc.batchMutex.Unlock()
 	})
+
 	return err
 }
 
@@ -80,6 +85,7 @@ func (nc *NATSConsumer) flushBatch() error {
 
 		return fmt.Errorf("failed to begin clickhouse: %w", err)
 	}
+
 	defer func() {
 		if err != nil {
 			tx.Rollback()
@@ -111,6 +117,7 @@ VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
 		)
 		if err != nil {
 			log.Warn().Err(err).Msg("failed to insert log (continuing batch)")
+
 			continue
 		}
 	}
@@ -120,5 +127,6 @@ VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
 	}
 
 	nc.batch = nil
+
 	return nil
 }

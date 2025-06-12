@@ -21,8 +21,10 @@ func New(db *store.DataStore) *Repo {
 }
 
 func (r *Repo) CreateGood(ctx context.Context, projectID int, req entity.GoodCreateRequest) (entity.Good, error) {
-	var good entity.Good
-	var priority int
+	var (
+		good     entity.Good
+		priority int
+	)
 
 	err := r.db.WithinTransaction(ctx, func(ctx context.Context, tx store.Transaction) error {
 		row := tx.QueryRow(ctx, `SELECT COALESCE(MAX(priority), 0) + 1 FROM goods`)
@@ -81,9 +83,10 @@ WHERE id = $1 AND project_id = $2
 		&good.CreatedAt,
 	)
 	if err != nil {
-		if err == pgx.ErrNoRows {
+		if errors.Is(err, pgx.ErrNoRows) {
 			return entity.Good{}, entity.ErrGoodNotFound
 		}
+
 		return entity.Good{}, fmt.Errorf("failed to scan good: %w", err)
 	}
 
@@ -101,9 +104,10 @@ SELECT id FROM goods WHERE id = $1 AND sproject_id = $2 FOR UPDATE
 
 		var goodID int
 		if err := row.Scan(&goodID); err != nil {
-			if err == pgx.ErrNoRows {
+			if errors.Is(err, pgx.ErrNoRows) {
 				return entity.ErrGoodNotFound
 			}
+
 			return fmt.Errorf("failed to check good's existence in the db: %w", err)
 		}
 
@@ -136,11 +140,11 @@ RETURNING id, project_id, name, COALESCE(description, '', priority, removed, cre
 
 		return nil
 	})
-
 	if err != nil {
 		if errors.Is(err, entity.ErrGoodNotFound) {
 			return entity.Good{}, err
 		}
+
 		return entity.Good{}, fmt.Errorf("failed to update good: %w", err)
 	}
 
@@ -158,9 +162,10 @@ SELECT id FROM goods WHERE id = $1 AND project_id = $2 FOR UPDATE
 
 		var goodID int
 		if err := row.Scan(&goodID); err != nil {
-			if err == pgx.ErrNoRows {
+			if errors.Is(err, pgx.ErrNoRows) {
 				return entity.ErrGoodNotFound
 			}
+
 			return fmt.Errorf("failed to check good's existence: %w", err)
 		}
 
@@ -182,7 +187,6 @@ RETURNING id, project_id, removed
 
 		return nil
 	})
-
 	if err != nil {
 		if errors.Is(err, entity.ErrGoodNotFound) {
 			return entity.GoodDeleteResponse{}, err
@@ -229,12 +233,12 @@ func (r *Repo) GetGoods(ctx context.Context, request entity.ListRequest) ([]enti
 			); err != nil {
 				return fmt.Errorf("error scanning good: %w", err)
 			}
+
 			goods = append(goods, good)
 		}
 
 		return rows.Err()
 	})
-
 	if err != nil {
 		return nil, entity.Meta{}, fmt.Errorf("failed to get goods: %w", err)
 	}
@@ -257,7 +261,7 @@ func (r *Repo) Reprioritize(ctx context.Context, id int, projectID int, newPrior
 			id, projectID,
 		).Scan(&currentPriority)
 		if err != nil {
-			if err == pgx.ErrNoRows {
+			if errors.Is(err, pgx.ErrNoRows) {
 				return entity.ErrGoodNotFound
 			}
 
@@ -269,6 +273,7 @@ func (r *Repo) Reprioritize(ctx context.Context, id int, projectID int, newPrior
 				ID:       id,
 				Priority: newPriority.NewPriority,
 			})
+
 			return nil
 		}
 
@@ -313,7 +318,6 @@ RETURNING id, priority
 
 		return nil
 	})
-
 	if err != nil {
 		return nil, fmt.Errorf("failed to reprioritize: %w", err)
 	}

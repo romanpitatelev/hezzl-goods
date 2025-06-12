@@ -58,3 +58,29 @@ func GetListRequest(r *http.Request) entity.ListRequest {
 
 	return parameters
 }
+
+func GetIDAndProjectID(r *http.Request) (entity.URLParams, error) {
+	queryParams := r.URL.Query()
+
+	idStr := queryParams.Get("id")
+	projectIDStr := queryParams.Get("projectId")
+
+	if idStr == "" || projectIDStr == "" {
+		return entity.URLParams{}, entity.ErrInvalidIDOrProjectID
+	}
+
+	id, err := strconv.Atoi(idStr)
+	if err != nil {
+		return entity.URLParams{}, entity.ErrInvalidIDOrProjectID
+	}
+
+	projectID, err := strconv.Atoi(projectIDStr)
+	if err != nil {
+		return entity.URLParams{}, entity.ErrInvalidIDOrProjectID
+	}
+
+	return entity.URLParams{
+		ID:        id,
+		ProjectID: projectID,
+	}, nil
+}

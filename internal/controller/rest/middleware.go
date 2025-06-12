@@ -24,7 +24,6 @@ const (
 //go:embed keys/public_key.pem
 var publicKeyData []byte
 
-//nolint:funlen
 func (s *Server) jwtAuth(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		header := r.Header.Get("Authorization")

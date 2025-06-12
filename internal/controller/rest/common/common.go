@@ -2,6 +2,7 @@ package common
 
 import (
 	"encoding/json"
+	"errors"
 	"fmt"
 	"net/http"
 	"strconv"
@@ -43,6 +44,14 @@ func OkResponse(w http.ResponseWriter, status int, response any) {
 
 func getStatusCode(err error) int {
 	switch {
+	case errors.Is(err, entity.ErrGoodNotFound):
+		return http.StatusNotFound
+	case errors.Is(err, entity.ErrInvalidToken):
+		return http.StatusUnauthorized
+	case errors.Is(err, entity.ErrInvalidIDOrProjectID) ||
+		errors.Is(err, entity.ErrEmptyName) ||
+		errors.Is(err, entity.ErrNegativePriority):
+		return http.StatusBadRequest
 	default:
 		return http.StatusInternalServerError
 	}

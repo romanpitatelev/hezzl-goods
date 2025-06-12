@@ -46,7 +46,12 @@ func Run(cfg *configs.Config) error {
 	if err != nil {
 		log.Panic().Err(err).Msg("failed to connect to ClickHouse")
 	}
-	defer clickHouseStore.Close()
+
+	defer func() {
+		if err := clickHouseStore.Close(); err != nil {
+			log.Warn().Err(err).Msg("failed to close ClickHouse connection")
+		}
+	}()
 
 	if err = clickHouseStore.Migrate(migrate.Up); err != nil {
 		log.Panic().Err(err).Msg("failed to migrate ClickHouse")

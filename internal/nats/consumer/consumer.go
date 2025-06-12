@@ -52,12 +52,14 @@ func (nc *NATSConsumer) Subscribe() error {
 		nc.batch = append(nc.batch, logMsg)
 
 		if len(nc.batch) >= nc.batchSize {
-			nc.flushBatch()
+			if err := nc.flushBatch(); err != nil {
+				log.Warn().Err(err).Msg("failed to flush batch")
+			}
 		}
 		nc.batchMutex.Unlock()
 	})
 
-	return err
+	return fmt.Errorf("error in nats while subscribing: %w", err)
 }
 
 func (nc *NATSConsumer) processBatch(d time.Duration) {
@@ -65,12 +67,16 @@ func (nc *NATSConsumer) processBatch(d time.Duration) {
 	for range ticker.C {
 		nc.batchMutex.Lock()
 		if len(nc.batch) > 0 {
-			nc.flushBatch()
+			if err := nc.flushBatch(); err != nil {
+				continue
+			}
 		}
+
 		nc.batchMutex.Unlock()
 	}
 }
 
+//nolint:funlen
 func (nc *NATSConsumer) flushBatch() error {
 	nc.batchMutex.Lock()
 	defer nc.batchMutex.Unlock()
@@ -87,8 +93,8 @@ func (nc *NATSConsumer) flushBatch() error {
 	}
 
 	defer func() {
-		if err != nil {
-			tx.Rollback()
+		if err = tx.Rollback(); err != nil {
+			log.Warn().Err(err).Msg("failed to rollback transaction in nats consumer")
 		}
 	}()
 
@@ -102,7 +108,12 @@ VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
 	if err != nil {
 		return fmt.Errorf("failed to prepare statement: %w", err)
 	}
-	defer stmt.Close()
+
+	defer func() {
+		if err := stmt.Close(); err != nil {
+			log.Warn().Err(err).Msg("error closing statement")
+		}
+	}()
 
 	for _, logMsg := range nc.batch {
 		_, err = stmt.Exec(

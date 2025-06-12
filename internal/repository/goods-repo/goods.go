@@ -98,7 +98,7 @@ func (r *Repo) UpdateGood(ctx context.Context, id int, projectID int, goodUpdate
 
 	err := r.db.WithinTransaction(ctx, func(ctx context.Context, tx store.Transaction) error {
 		queryCheck := `
-SELECT id FROM goods WHERE id = $1 AND sproject_id = $2 FOR UPDATE
+SELECT id FROM goods WHERE id = $1 AND project_id = $2 FOR UPDATE
 `
 		row := tx.QueryRow(ctx, queryCheck, id, projectID)
 
@@ -116,7 +116,7 @@ UPDATE goods
 SET name = $1,
 	description = COALESCE($2, description)
 WHERE id = $3 AND project_id = $4
-RETURNING id, project_id, name, COALESCE(description, '', priority, removed, created_at)		
+RETURNING id, project_id, name, COALESCE(description, ''), priority, removed, created_at)		
 `
 		row = tx.QueryRow(ctx, queryUpdate,
 			goodUpdate.Name,
@@ -142,7 +142,7 @@ RETURNING id, project_id, name, COALESCE(description, '', priority, removed, cre
 	})
 	if err != nil {
 		if errors.Is(err, entity.ErrGoodNotFound) {
-			return entity.Good{}, err
+			return entity.Good{}, fmt.Errorf("good is not found in UpdateGood(): %w", err)
 		}
 
 		return entity.Good{}, fmt.Errorf("failed to update good: %w", err)
@@ -189,8 +189,9 @@ RETURNING id, project_id, removed
 	})
 	if err != nil {
 		if errors.Is(err, entity.ErrGoodNotFound) {
-			return entity.GoodDeleteResponse{}, err
+			return entity.GoodDeleteResponse{}, fmt.Errorf("good is not found in DeleteGood(): %w", err)
 		}
+
 		return entity.GoodDeleteResponse{}, fmt.Errorf("failed to delete good: %w", err)
 	}
 
@@ -218,13 +219,17 @@ func (r *Repo) GetGoods(ctx context.Context, request entity.ListRequest) ([]enti
 			LIMIT $1 OFFSET $2`,
 			request.Limit, request.Offset,
 		)
+		if err != nil {
+			return fmt.Errorf("error while quering in GetGoods(): %w", err)
+		}
+
 		defer rows.Close()
 
 		for rows.Next() {
 			var good entity.Good
 			if err := rows.Scan(
 				&good.ID,
-				&good.Priority,
+				&good.ProjectID,
 				&good.Name,
 				&good.Description,
 				&good.Priority,
@@ -249,23 +254,14 @@ func (r *Repo) GetGoods(ctx context.Context, request entity.ListRequest) ([]enti
 	return goods, meta, nil
 }
 
+//nolint:funlen
 func (r *Repo) Reprioritize(ctx context.Context, id int, projectID int, newPriority entity.PriorityRequest) ([]entity.Priority, error) {
 	var updatedPriorities []entity.Priority
 
 	err := r.db.WithinTransaction(ctx, func(ctx context.Context, tx store.Transaction) error {
-		var currentPriority int
-		err := tx.QueryRow(ctx,
-			`SELECT priority FROM goods
-			WHERE id = $1 AND project_id = $2
-			FOR UPDATE`,
-			id, projectID,
-		).Scan(&currentPriority)
+		currentPriority, err := r.getCurrentPriority(ctx, tx, id, projectID)
 		if err != nil {
-			if errors.Is(err, pgx.ErrNoRows) {
-				return entity.ErrGoodNotFound
-			}
-
-			return fmt.Errorf("failed to get current priority: %w", err)
+			return fmt.Errorf("error getting current priority: %w", err)
 		}
 
 		if currentPriority == newPriority.NewPriority {
@@ -323,4 +319,25 @@ RETURNING id, priority
 	}
 
 	return updatedPriorities, nil
+}
+
+func (r *Repo) getCurrentPriority(ctx context.Context, tx store.Transaction, id, projectID int) (int, error) {
+	var currentPriority int
+
+	row := tx.QueryRow(ctx,
+		`SELECT priority FROM goods
+		WHERE id = $1 AND project_id = $2
+		FOR UPDATE`,
+		id, projectID,
+	)
+
+	if err := row.Scan(&currentPriority); err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return 0, entity.ErrGoodNotFound
+		}
+
+		return 0, fmt.Errorf("failed to get current priority: %w", err)
+	}
+
+	return currentPriority, nil
 }

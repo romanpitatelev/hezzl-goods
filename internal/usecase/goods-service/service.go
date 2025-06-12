@@ -50,7 +50,7 @@ func (s *Service) CreateGood(ctx context.Context, projectID int, req entity.Good
 	}
 
 	if projectID <= 0 {
-		return entity.Good{}, fmt.Errorf("project ID cannot be negative or zero")
+		return entity.Good{}, entity.ErrInvalidIDOrProjectID
 	}
 
 	createdGood, err := s.goodsStore.CreateGood(ctx, projectID, req)
@@ -89,7 +89,6 @@ func (s *Service) GetGood(ctx context.Context, id int, projectID int) (entity.Go
 		if err := json.Unmarshal([]byte(cached), &good); err == nil {
 			return good, nil
 		}
-		log.Warn().Err(err).Msg("failed to unmarshal cached good")
 	}
 
 	good, err := s.goodsStore.GetGood(ctx, id, projectID)
@@ -97,7 +96,7 @@ func (s *Service) GetGood(ctx context.Context, id int, projectID int) (entity.Go
 		return entity.Good{}, fmt.Errorf("failed to get good: %w", err)
 	}
 
-	go func() {
+	go func(ctx context.Context) {
 		jsonData, err := json.Marshal(good)
 		if err != nil {
 			log.Warn().Err(err).Msg("failed to marshal good for caching")
@@ -105,10 +104,10 @@ func (s *Service) GetGood(ctx context.Context, id int, projectID int) (entity.Go
 			return
 		}
 
-		if err := s.redisClient.Set(context.Background(), cacheKey, jsonData, time.Minute); err != nil {
+		if err := s.redisClient.Set(ctx, cacheKey, jsonData, time.Minute); err != nil {
 			log.Warn().Err(err).Msg("failed to cache good")
 		}
-	}()
+	}(ctx)
 
 	logMsg := entity.GoodLog{
 		Operation:   "get",

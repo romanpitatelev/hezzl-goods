@@ -31,17 +31,34 @@ func New(ctx context.Context, addr, password string, db int) (*Client, error) {
 }
 
 func (c *Client) Get(ctx context.Context, key string) (string, error) {
-	return c.client.Get(ctx, key).Result()
+	val, err := c.client.Get(ctx, key).Result()
+	if err != nil {
+		return "", fmt.Errorf("redis get failed: %w", err)
+	}
+
+	return val, nil
 }
 
 func (c *Client) Set(ctx context.Context, key string, value interface{}, expiration time.Duration) error {
-	return c.client.Set(ctx, key, value, expiration).Err()
+	if err := c.client.Set(ctx, key, value, expiration).Err(); err != nil {
+		return fmt.Errorf("error in Set(): %w", err)
+	}
+
+	return nil
 }
 
 func (c *Client) Del(ctx context.Context, keys ...string) error {
-	return c.client.Del(ctx, keys...).Err()
+	if err := c.client.Del(ctx, keys...).Err(); err != nil {
+		return fmt.Errorf("error deleting good: %w", err)
+	}
+
+	return nil
 }
 
 func (c *Client) Close() error {
-	return c.client.Close()
+	if err := c.client.Close(); err != nil {
+		return fmt.Errorf("error closing redis client: %w", err)
+	}
+
+	return nil
 }

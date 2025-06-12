@@ -25,7 +25,7 @@ func NewClickHouse(ctx context.Context, dsn string) (*ClickHouseStore, error) {
 	}
 
 	if err := db.PingContext(ctx); err != nil {
-		return nil, fmt.Errorf("failed to ping ClickHouse")
+		return nil, fmt.Errorf("failed to ping ClickHouse: %w", err)
 	}
 
 	return &ClickHouseStore{
@@ -49,9 +49,18 @@ func (c *ClickHouseStore) Migrate(direction migrate.MigrationDirection) error {
 }
 
 func (c *ClickHouseStore) Close() error {
-	return c.db.Close()
+	if err := c.db.Close(); err != nil {
+		return fmt.Errorf("error closing ClickHouse: %w", err)
+	}
+
+	return nil
 }
 
 func (c *ClickHouseStore) Begin() (*sql.Tx, error) {
-	return c.db.Begin()
+	tx, err := c.db.Begin()
+	if err != nil {
+		return nil, fmt.Errorf("error starting ClickHouse: %w", err)
+	}
+
+	return tx, nil
 }

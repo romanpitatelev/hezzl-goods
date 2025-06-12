@@ -2,6 +2,7 @@ package goodsservice
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"time"
 
@@ -11,11 +12,11 @@ import (
 
 type goodsStore interface {
 	CreateGood(ctx context.Context, projectID int, req entity.GoodCreateRequest) (entity.Good, error)
-	GetGood(ctx context.Context, id int, project_id int) (entity.Good, error)
-	UpdateGood(ctx context.Context, id int, project_id int, goodUpdate entity.GoodUpdate) (entity.Good, error)
-	DeleteGood(ctx context.Context, id int, project_id int) (entity.GoodDeleteResponse, error)
-	GetGoods(ctx context.Context, request entity.ListRequest) ([]entity.Good, error)
-	Reprioritize(ctx context.Context, id int, project_id int, new_priority entity.PriorityRequest) (entity.PriorityResponse, error)
+	GetGood(ctx context.Context, id int, projectID int) (entity.Good, error)
+	UpdateGood(ctx context.Context, id int, projectID int, goodUpdate entity.GoodUpdate) (entity.Good, error)
+	DeleteGood(ctx context.Context, id int, projectID int) (entity.GoodDeleteResponse, error)
+	GetGoods(ctx context.Context, request entity.ListRequest) ([]entity.Good, entity.Meta, error)
+	Reprioritize(ctx context.Context, id int, projectID int, newPriority entity.PriorityRequest) (entity.PriorityResponse, error)
 }
 
 type NATSPublisher interface {
@@ -118,6 +119,80 @@ func (s *Service) UpdateGood(ctx context.Context, id int, projectID int, goodUpd
 	return updatedGood, nil
 }
 
-func (s *Service) DeleteGood(ctx context.Context, id int, project_id int) (entity.GoodDeleteResponse, error)
-func (s *Service) GetGoods(ctx context.Context, request entity.ListRequest) ([]entity.Good, error)
-func (s *Service) Reprioritize(ctx context.Context, id int, project_id int, new_priority entity.PriorityRequest) (entity.PriorityResponse, error)
+func (s *Service) DeleteGood(ctx context.Context, id int, projectID int) (entity.GoodDeleteResponse, error) {
+	if id <= 0 || projectID <= 0 {
+		return entity.GoodDeleteResponse{}, entity.ErrInvalidIDOrProjectID
+	}
+
+	deletedGood, err := s.goodsStore.DeleteGood(ctx, id, projectID)
+	if err != nil {
+		return entity.GoodDeleteResponse{}, fmt.Errorf("failed to delete good: %w", err)
+	}
+
+	cacheKeys := []string{
+		fmt.Sprintf("good:%d:%d", id, projectID),
+		"goods:list:*",
+	}
+	if err := s.redisClient.Del(ctx, cacheKeys...); err != nil {
+		log.Warn().Err(err).Msg("failed to invalidate redis cache while deleting")
+	}
+
+	logMsg := entity.GoodLog{
+		Operation:   "delete",
+		GoodID:      deletedGood.ID,
+		ProjectID:   deletedGood.CampaignID,
+		Name:        "",
+		Description: "",
+		Priority:    0,
+		Removed:     true,
+		EventTime:   time.Now(),
+	}
+
+	if err := s.natsClient.Publish("goods.logs", logMsg); err != nil {
+		log.Warn().Err(err).Msg("failed to publish deleted good to NATS")
+	}
+
+	return deletedGood, nil
+}
+
+func (s *Service) GetGoods(ctx context.Context, request entity.ListRequest) (entity.GoodsListResponse, error) {
+	if request.Limit <= 0 {
+		request.Limit = 10
+	}
+
+	if request.Offset < 0 {
+		request.Offset = 0
+	}
+
+	cacheKey := fmt.Sprintf("goods:list:%d:%d", request.Limit, request.Offset)
+	cached, err := s.redisClient.Get(ctx, cacheKey)
+	if err != nil && cached != "" {
+		var response entity.GoodsListResponse
+		if err := json.Unmarshal([]byte(cached), &response); err == nil {
+			return response, nil
+		}
+
+		log.Warn().Err(err).Msg("error unmarshalling cached goods")
+	}
+
+	goods, meta, err := s.goodsStore.GetGoods(ctx, request)
+	if err != nil {
+		return entity.GoodsListResponse{}, fmt.Errorf("failed to get goods: %w", err)
+	}
+
+	response := entity.GoodsListResponse{
+		Meta:  meta,
+		Goods: goods,
+	}
+
+	jsonData, err := json.Marshal(response)
+	if err == nil {
+		if err := s.redisClient.Set(ctx, cacheKey, jsonData, time.Minute); err != nil {
+			log.Warn().Err(err).Msg("failed to cache goods list")
+		}
+	}
+
+	return response, nil
+}
+
+func (s *Service) Reprioritize(ctx context.Context, id int, projectID int, newPriority entity.PriorityRequest) (entity.PriorityResponse, error)

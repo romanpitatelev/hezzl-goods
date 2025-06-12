@@ -81,9 +81,18 @@ type UserInfo struct {
 }
 
 type ListRequest struct {
-	Sorting    string
-	Descending bool
-	Limit      int
-	Filter     string
-	Offset     int
+	Limit  int
+	Offset int
+}
+
+type Meta struct {
+	Total   int `json:"total"`
+	Removed int `json:"removed"`
+	Limit   int `json:"limit"`
+	Offset  int `json:"offset"`
+}
+
+type GoodsListResponse struct {
+	Meta  Meta   `json:"meta"`
+	Goods []Good `json:"goods"`
 }

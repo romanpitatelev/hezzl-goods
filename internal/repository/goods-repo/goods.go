@@ -119,6 +119,103 @@ RETURNING id, project_id, name, COALESCE(description, '', priority, removed, cre
 	return good, nil
 }
 
-func (r *Repo) DeleteGood(ctx context.Context, id int, project_id int) (entity.GoodDeleteResponse, error)
-func (r *Repo) GetGoods(ctx context.Context, request entity.ListRequest) ([]entity.Good, error)
+func (r *Repo) DeleteGood(ctx context.Context, id int, projectID int) (entity.GoodDeleteResponse, error) {
+	var response entity.GoodDeleteResponse
+
+	err := r.db.WithinTransaction(ctx, func(ctx context.Context, tx store.Transaction) error {
+		queryCheck := `
+SELECT id FROM goods WHERE id = $1 AND project_id = $2 FOR UPDATE
+`
+		row := tx.QueryRow(ctx, queryCheck, id, projectID)
+
+		var goodID int
+		if err := row.Scan(&goodID); err != nil {
+			if err == pgx.ErrNoRows {
+				return entity.ErrGoodNotFound
+			}
+			return fmt.Errorf("failed to check good's existence: %w", err)
+		}
+
+		queryDelete := `
+UPDATE goods
+SET removed = true
+WHERE id = $1 AND project_id = $2
+RETURNING id, project_id, removed
+`
+		row = tx.QueryRow(ctx, queryDelete, id, projectID)
+
+		err := row.Scan(
+			&response.ID,
+			&response.CampaignID,
+			&response.Removed,
+		)
+		if err != nil {
+			return fmt.Errorf("failed to scan deleted good: %w", err)
+		}
+
+		return nil
+	})
+
+	if err != nil {
+		if errors.Is(err, entity.ErrGoodNotFound) {
+			return entity.GoodDeleteResponse{}, err
+		}
+		return entity.GoodDeleteResponse{}, fmt.Errorf("failed to delete good: %w", err)
+	}
+
+	return response, nil
+}
+
+func (r *Repo) GetGoods(ctx context.Context, request entity.ListRequest) ([]entity.Good, entity.Meta, error) {
+	var (
+		meta  entity.Meta
+		goods []entity.Good
+	)
+
+	err := r.db.WithinTransaction(ctx, func(ctx context.Context, tx store.Transaction) error {
+		row := tx.QueryRow(ctx, `SELECT COUNT(*), COUNT(*) FILTER (WHERE removed = true) FROM goods`)
+
+		err := row.Scan(&meta.Total, &meta.Removed)
+		if err != nil {
+			return fmt.Errorf("failed to get goods count: %w", err)
+		}
+
+		rows, err := tx.Query(ctx,
+			`SELECT id, project_id, name, COALESCE(description, ''), priority, removed, created_at
+			FROM goods
+			ORDER BY created_at DESC
+			LIMIT $1 OFFSET $2`,
+			request.Limit, request.Offset,
+		)
+		defer rows.Close()
+
+		for rows.Next() {
+			var good entity.Good
+			if err := rows.Scan(
+				&good.ID,
+				&good.Priority,
+				&good.Name,
+				&good.Description,
+				&good.Priority,
+				&good.Removed,
+				&good.CreatedAt,
+			); err != nil {
+				return fmt.Errorf("error scanning good: %w", err)
+			}
+			goods = append(goods, good)
+		}
+
+		return rows.Err()
+	})
+
+	if err != nil {
+		return nil, entity.Meta{}, fmt.Errorf("failed to get goods: %w", err)
+	}
+
+	meta.Limit = request.Limit
+	meta.Offset = request.Offset
+
+	return goods, meta, nil
+}
+
 func (r *Repo) Reprioritize(ctx context.Context, id int, project_id int, new_priority entity.PriorityRequest) (entity.PriorityResponse, error)

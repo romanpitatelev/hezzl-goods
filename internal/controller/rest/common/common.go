@@ -51,12 +51,8 @@ func getStatusCode(err error) int {
 func GetListRequest(r *http.Request) entity.ListRequest {
 	queryParams := r.URL.Query()
 
-	parameters := entity.ListRequest{
-		Sorting: queryParams.Get("sorting"),
-		Filter:  queryParams.Get("filter"),
-	}
+	parameters := entity.ListRequest{}
 
-	parameters.Descending, _ = strconv.ParseBool(queryParams.Get("descending"))
 	parameters.Limit, _ = strconv.Atoi(queryParams.Get("limit"))
 	parameters.Offset, _ = strconv.Atoi(queryParams.Get("offset"))
 

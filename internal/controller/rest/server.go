@@ -62,6 +62,8 @@ func New(
 
 			r.Post("/good/create", s.goodsHandler.CreateGood)
 			r.Patch("/good/update", s.goodsHandler.UpdateGood)
+			r.Delete("/good/remove", s.goodsHandler.DeleteGood)
+			r.Get("goods/list", s.goodsHandler.GetGoods)
 		})
 	})
 

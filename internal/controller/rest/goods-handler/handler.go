@@ -13,7 +13,7 @@ import (
 type goodsService interface {
 	CreateGood(ctx context.Context, projectID int, req entity.GoodCreateRequest) (entity.Good, error)
 	GetGood(ctx context.Context, id int, project_id int) (entity.Good, error)
-	UpdateGood(ctx context.Context, id int, project_id int, goodUpdate entity.GoodUpdate) (entity.Good, error)
+	UpdateGood(ctx context.Context, id int, projectID int, goodUpdate entity.GoodUpdate) (entity.Good, error)
 	DeleteGood(ctx context.Context, id int, project_id int) (entity.GoodDeleteResponse, error)
 	GetGoods(ctx context.Context, request entity.ListRequest) ([]entity.Good, error)
 	Reprioritize(ctx context.Context, id int, project_id int, new_priority entity.PriorityRequest) (entity.PriorityResponse, error)
@@ -57,8 +57,51 @@ func (h *Handler) CreateGood(w http.ResponseWriter, r *http.Request) {
 	common.OkResponse(w, http.StatusOK, createdGood)
 }
 
-func (h *Handler) GetGood(w http.ResponseWriter, r *http.Request)      {}
-func (h *Handler) UpdateGood(w http.ResponseWriter, r *http.Request)   {}
+func (h *Handler) GetGood(w http.ResponseWriter, r *http.Request) {}
+
+func (h *Handler) UpdateGood(w http.ResponseWriter, r *http.Request) {
+	queryParams := r.URL.Query()
+
+	idStr := queryParams.Get("id")
+	projectIDStr := queryParams.Get("projectId")
+	if idStr == "" || projectIDStr == "" {
+		http.Error(w, "empty good id or project id", http.StatusBadRequest)
+	}
+
+	id, err := strconv.Atoi(idStr)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusBadRequest)
+
+		return
+	}
+
+	projectID, err := strconv.Atoi(projectIDStr)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusBadRequest)
+
+		return
+	}
+
+	var req entity.GoodUpdate
+	if err = json.NewDecoder(r.Body).Decode(&req); err != nil {
+		http.Error(w, "error decoding request body", http.StatusBadRequest)
+
+		return
+	}
+
+	ctx := r.Context()
+
+	updatedGood, err := h.goodsService.UpdateGood(ctx, id, projectID, req)
+	if err != nil {
+		common.ErrorResponse(w, "error creating good", err)
+
+		return
+	}
+
+	common.OkResponse(w, http.StatusOK, updatedGood)
+
+}
+
 func (h *Handler) DeleteGood(w http.ResponseWriter, r *http.Request)   {}
 func (h *Handler) GetGoods(w http.ResponseWriter, r *http.Request)     {}
 func (h *Handler) Reprioritize(w http.ResponseWriter, r *http.Request) {}

@@ -8,11 +8,12 @@ import (
 
 	"github.com/nats-io/nats.go"
 	"github.com/romanpitatelev/hezzl-goods/internal/configs"
-	"github.com/romanpitatelev/hezzl-goods/internal/controller/consumer"
 	"github.com/romanpitatelev/hezzl-goods/internal/controller/rest"
 	goodshandler "github.com/romanpitatelev/hezzl-goods/internal/controller/rest/goods-handler"
+	"github.com/romanpitatelev/hezzl-goods/internal/nats/consumer"
+	"github.com/romanpitatelev/hezzl-goods/internal/nats/producer"
 	goodsrepo "github.com/romanpitatelev/hezzl-goods/internal/repository/goods-repo"
-	"github.com/romanpitatelev/hezzl-goods/internal/repository/producer"
+	"github.com/romanpitatelev/hezzl-goods/internal/repository/redis"
 	"github.com/romanpitatelev/hezzl-goods/internal/repository/store"
 	goodsservice "github.com/romanpitatelev/hezzl-goods/internal/usecase/goods-service"
 	"github.com/rs/zerolog"
@@ -66,7 +67,17 @@ func Run(cfg *configs.Config) error {
 
 	goodsRepo := goodsrepo.New(db)
 
-	goodsService := goodsservice.New(goodsRepo, natsProducer)
+	redisClient, err := redis.New(ctx, cfg.RedisAddr, cfg.RedisPassword, cfg.RedisDB)
+	if err != nil {
+		log.Panic().Err(err).Msg("failed to connect to Redis")
+	}
+	defer func() {
+		if err := redisClient.Close(); err != nil {
+			log.Warn().Err(err).Msg("error closing Redis connection")
+		}
+	}()
+
+	goodsService := goodsservice.New(goodsRepo, natsProducer, redisClient)
 
 	goodsHandler := goodshandler.New(goodsService)
 

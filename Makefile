@@ -1,6 +1,6 @@
 run:
 	@echo 'Running the project ...'
-	go build -o bin/main ./cmd/denet/main.go
+	go build -o bin/main ./cmd/hezzl-goods/main.go
 	./bin/main
 
 up: 

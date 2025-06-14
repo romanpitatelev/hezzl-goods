@@ -87,7 +87,7 @@ func (s *IntegrationTestSuite) SetupSuite() {
 	s.Require().NoError(err)
 
 	status := nc.Status()
-	s.Require().Equal(status, nats.CONNECTED)
+	s.Require().Equal(nats.CONNECTED, status)
 
 	log.Info().Msg("successful connection to NATS")
 
@@ -117,6 +117,7 @@ func (s *IntegrationTestSuite) SetupSuite() {
 		rest.GetPublicKey(),
 	)
 
+	//nolint:testifylint
 	go func() {
 		err = s.server.Run(ctx)
 		s.Require().NoError(err)

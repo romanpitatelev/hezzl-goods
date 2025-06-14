@@ -130,6 +130,7 @@ func (u *UserID) UnmarshalText(data []byte) error {
 	return unmarshalUUID((*uuid.UUID)(u), data)
 }
 
+//nolint:wrapcheck
 func (u UserID) MarshalText() ([]byte, error) {
 	return json.Marshal(uuid.UUID(u).String())
 }

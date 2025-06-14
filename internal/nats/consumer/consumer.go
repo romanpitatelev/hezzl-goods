@@ -49,6 +49,8 @@ func (nc *NATSConsumer) Subscribe() error {
 		}
 
 		nc.batchMutex.Lock()
+		defer nc.batchMutex.Unlock()
+
 		nc.batch = append(nc.batch, logMsg)
 
 		if len(nc.batch) >= nc.batchSize {
@@ -56,10 +58,12 @@ func (nc *NATSConsumer) Subscribe() error {
 				log.Warn().Err(err).Msg("failed to flush batch")
 			}
 		}
-		nc.batchMutex.Unlock()
 	})
+	if err != nil {
+		return fmt.Errorf("error in nats while subscribing: %w", err)
+	}
 
-	return fmt.Errorf("error in nats while subscribing: %w", err)
+	return nil
 }
 
 func (nc *NATSConsumer) processBatch(d time.Duration) {

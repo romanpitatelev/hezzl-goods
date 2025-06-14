@@ -55,7 +55,7 @@ func Run(cfg *configs.Config) error {
 		}
 	}()
 
-	if err = clickHouseStore.Migrate(); err != nil {
+	if err = clickHouseStore.Migrate(migrate.Up); err != nil {
 		log.Panic().Err(err).Msg("failed to migrate ClickHouse")
 	}
 
@@ -65,6 +65,12 @@ func Run(cfg *configs.Config) error {
 	if err != nil {
 		log.Panic().Err(err).Msg("failed to connect to NATS")
 	}
+
+	if status := nc.Status(); status != nats.CONNECTED {
+		log.Panic().Msgf("NATS connection status: %v", status)
+	}
+
+	log.Info().Msg("successful connection to NATS")
 
 	natsConsumer := consumer.New(nc, clickHouseStore)
 	if err := natsConsumer.Subscribe(); err != nil {

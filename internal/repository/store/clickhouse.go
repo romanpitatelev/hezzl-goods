@@ -7,11 +7,12 @@ import (
 	"fmt"
 	"io/fs"
 	"path/filepath"
+	"sort"
 	"strings"
 
 	"github.com/ClickHouse/clickhouse-go/v2"
-	_ "github.com/ClickHouse/clickhouse-go/v2"
 	"github.com/rs/zerolog/log"
+	migrate "github.com/rubenv/sql-migrate"
 )
 
 //go:embed clickhouse_migrations
@@ -23,13 +24,14 @@ type ClickHouseStore struct {
 }
 
 func NewClickHouse(ctx context.Context, dsn string) (*ClickHouseStore, error) {
-	db, err := sql.Open("clickhouse", dsn)
+	opt, err := clickhouse.ParseDSN(dsn)
 	if err != nil {
-		return nil, fmt.Errorf("failed to connect to ClickHouse: %w", err)
+		return nil, fmt.Errorf("invalid ClickHouse DSN: %w", err)
 	}
 
 	log.Debug().Msgf("dsn in NewClickHouse() function: %v", dsn)
 
+	db := clickhouse.OpenDB(opt)
 	if err := db.PingContext(ctx); err != nil {
 		return nil, fmt.Errorf("failed to ping ClickHouse: %w", err)
 	}
@@ -40,27 +42,23 @@ func NewClickHouse(ctx context.Context, dsn string) (*ClickHouseStore, error) {
 	}, nil
 }
 
-func (c *ClickHouseStore) Migrate() error {
-	conn, err := clickhouse.Open(&clickhouse.Options{
-		Addr: []string{strings.TrimPrefix(c.dsn, "tcp://")},
-		Auth: clickhouse.Auth{
-			Database: "hezzl_logs",
-			Username: "user",
-			Password: "my_pass",
-		},
-	})
-	if err != nil {
-		return fmt.Errorf("failed to open native ClickHouse connection: %w", err)
+func (c *ClickHouseStore) Migrate(direction migrate.MigrationDirection) error {
+	suffix := "up.sql"
+	if direction == migrate.Down {
+		suffix = "down.sql"
 	}
-	defer conn.Close()
 
 	entries, err := clickhouseMigrations.ReadDir("clickhouse_migrations")
 	if err != nil {
 		return fmt.Errorf("failed to read migrations directory: %w", err)
 	}
 
+	sort.Slice(entries, func(i, j int) bool {
+		return entries[i].Name() < entries[j].Name()
+	})
+
 	for _, entry := range entries {
-		if entry.IsDir() {
+		if entry.IsDir() || !strings.HasSuffix(entry.Name(), suffix) {
 			continue
 		}
 
@@ -69,16 +67,8 @@ func (c *ClickHouseStore) Migrate() error {
 			return fmt.Errorf("failed to read migration %s: %w", entry.Name(), err)
 		}
 
-		statements := strings.Split(string(content), ";")
-		for _, stmt := range statements {
-			stmt = strings.TrimSpace(stmt)
-			if stmt == "" {
-				continue
-			}
-
-			if err := conn.Exec(context.Background(), stmt); err != nil {
-				return fmt.Errorf("failed to execute %s: %w", entry.Name(), err)
-			}
+		if _, err := c.db.Exec(string(content)); err != nil {
+			return fmt.Errorf("failed to execute %s: %w", entry.Name(), err)
 		}
 	}
 

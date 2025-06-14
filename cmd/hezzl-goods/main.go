@@ -1,8 +1,8 @@
 package main
 
 import (
-	"github.com/romanpitatelev/denet/internal/app"
-	"github.com/romanpitatelev/denet/internal/configs"
+	"github.com/romanpitatelev/hezzl-goods/internal/app"
+	"github.com/romanpitatelev/hezzl-goods/internal/configs"
 )
 
 func main() {

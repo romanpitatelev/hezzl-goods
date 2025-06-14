@@ -24,7 +24,6 @@ const (
 //go:embed keys/public_key.pem
 var publicKeyData []byte
 
-//nolint:funlen
 func (s *Server) jwtAuth(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		header := r.Header.Get("Authorization")
@@ -76,16 +75,13 @@ func (s *Server) jwtAuth(next http.Handler) http.Handler {
 			return
 		}
 
-		userInfo := entity.User{
-			ID:        claims.UserID,
-			Email:     *claims.Email,
-			Role:      *claims.Role,
-			Points:    claims.Points,
-			CreatedAt: claims.CreatedAt,
-			UpdatedAt: *claims.UpdatedAt,
+		userInfo := entity.UserInfo{
+			ID:    claims.UserID,
+			Email: *claims.Email,
+			Role:  *claims.Role,
 		}
 
-		r = r.WithContext(context.WithValue(r.Context(), entity.User{}, userInfo))
+		r = r.WithContext(context.WithValue(r.Context(), entity.UserInfo{}, userInfo))
 
 		next.ServeHTTP(w, r)
 	})

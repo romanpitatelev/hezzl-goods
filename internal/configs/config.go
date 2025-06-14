@@ -17,7 +17,17 @@ type Config struct {
 	LogLevel string `env:"LOG_Level" env-default:"debug" env-description:"Log level"`
 
 	BindAddress string `env:"BIND_ADDRESS" env-default:":8081" env-description:"Bind address"`
-	PostgresDSN string `env:"POSTGRES_DSN" env-default:"postgresql://postgres:my_pass@localhost:5432/denet_db" env-description:"PostgreSQL DSN"`
+	PostgresDSN string `env:"POSTGRES_DSN" env-default:"postgresql://postgres:my_pass@localhost:5432/hezzl_db" env-description:"PostgreSQL DSN"`
+
+	ClickHouseDSN      string `env:"CLICKHOUSE_DSN" env-default:"clickhouse://user:my_pass@localhost:9000/hezzl_logs" env-description:"ClickHouse DSN"`
+	ClickHouseDatabase string `env:"CLICKHOUSE_DATABASE" env-default:"hezzle_logs" env-description:"ClickHouse database name"`
+
+	NATSURL     string `env:"NATS_URL" env-default:"nats://localhost:4222"`
+	NATSSubject string `env:"NATS_SUBJECT" env-default:"goods.logs"`
+
+	RedisAddr     string `env:"REDIS_ADDR" env-default:"localhost:6379" env-description:"Redis address"`
+	RedisPassword string `env:"REDIS_PASSWORD" env-default:"" env-description:"Redis password"`
+	RedisDB       int    `env:"REDIS_DB" env-default:"0" env-description:"Redis database number"`
 }
 
 func findConfigFile() bool {
@@ -40,12 +50,12 @@ func (e *Config) getHelpString() (string, error) {
 func New() *Config {
 	cfg := &Config{}
 
-	helpString, err := cfg.getHelpString()
+	_, err := cfg.getHelpString()
 	if err != nil {
 		log.Panic().Err(err).Msg("failed to get help string")
 	}
 
-	log.Info().Msg(helpString)
+	// log.Info().Msg(helpString)
 
 	if findConfigFile() {
 		if err := cleanenv.ReadEnv(cfg); err != nil {

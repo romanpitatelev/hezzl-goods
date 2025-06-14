@@ -2,6 +2,7 @@ package common
 
 import (
 	"encoding/json"
+	"errors"
 	"fmt"
 	"net/http"
 	"strconv"
@@ -43,6 +44,14 @@ func OkResponse(w http.ResponseWriter, status int, response any) {
 
 func getStatusCode(err error) int {
 	switch {
+	case errors.Is(err, entity.ErrGoodNotFound):
+		return http.StatusNotFound
+	case errors.Is(err, entity.ErrInvalidToken):
+		return http.StatusUnauthorized
+	case errors.Is(err, entity.ErrInvalidIDOrProjectID) ||
+		errors.Is(err, entity.ErrEmptyName) ||
+		errors.Is(err, entity.ErrNegativePriority):
+		return http.StatusBadRequest
 	default:
 		return http.StatusInternalServerError
 	}
@@ -51,14 +60,36 @@ func getStatusCode(err error) int {
 func GetListRequest(r *http.Request) entity.ListRequest {
 	queryParams := r.URL.Query()
 
-	parameters := entity.ListRequest{
-		Sorting: queryParams.Get("sorting"),
-		Filter:  queryParams.Get("filter"),
-	}
+	parameters := entity.ListRequest{}
 
-	parameters.Descending, _ = strconv.ParseBool(queryParams.Get("descending"))
 	parameters.Limit, _ = strconv.Atoi(queryParams.Get("limit"))
 	parameters.Offset, _ = strconv.Atoi(queryParams.Get("offset"))
 
 	return parameters
+}
+
+func GetIDAndProjectID(r *http.Request) (entity.URLParams, error) {
+	queryParams := r.URL.Query()
+
+	idStr := queryParams.Get("id")
+	projectIDStr := queryParams.Get("projectId")
+
+	if idStr == "" || projectIDStr == "" {
+		return entity.URLParams{}, entity.ErrInvalidIDOrProjectID
+	}
+
+	id, err := strconv.Atoi(idStr)
+	if err != nil {
+		return entity.URLParams{}, entity.ErrInvalidIDOrProjectID
+	}
+
+	projectID, err := strconv.Atoi(projectIDStr)
+	if err != nil {
+		return entity.URLParams{}, entity.ErrInvalidIDOrProjectID
+	}
+
+	return entity.URLParams{
+		ID:        id,
+		ProjectID: projectID,
+	}, nil
 }

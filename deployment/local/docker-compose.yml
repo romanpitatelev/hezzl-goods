@@ -15,7 +15,36 @@ services:
       interval: 1s
       timeout: 1s
       retries: 10
+  clickhouse:
+    image: clickhouse/clickhouse-server:25.5.2.47
+    ports:
+      - "8123:8123"
+      - "9000:9000"
+    volumes:
+      - clickhouse_data:/var/lib/clickhouse
+    environment:
+      CLICKHOUSE_USER: user
+      CLICKHOUSE_PASSWORD: my_pass   
+      CLICKHOUSE_DB: hezzl_logs
+  nats:
+    image: nats:2.11.4
+    ports:
+      - "4222:4222"
+    command: "-js"
+  redis:
+    image: redis:8.0.2
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis_data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 1s
+      timeout: 3s
+      retries: 10
   
 volumes:
   postgres-data:
     driver: local
+  clickhouse_data:
+  redis_data:

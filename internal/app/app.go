@@ -42,6 +42,8 @@ func Run(cfg *configs.Config) error {
 		log.Panic().Err(err).Msg("failed to migrate")
 	}
 
+	log.Info().Msg("successful Postgres migration")
+
 	clickHouseStore, err := store.NewClickHouse(ctx, cfg.ClickHouseDSN)
 	if err != nil {
 		log.Panic().Err(err).Msg("failed to connect to ClickHouse")
@@ -53,11 +55,11 @@ func Run(cfg *configs.Config) error {
 		}
 	}()
 
-	if err = clickHouseStore.Migrate(migrate.Up); err != nil {
+	if err = clickHouseStore.Migrate(); err != nil {
 		log.Panic().Err(err).Msg("failed to migrate ClickHouse")
 	}
 
-	log.Info().Msg("successful migration")
+	log.Info().Msg("successful ClickHouse migration")
 
 	nc, err := nats.Connect(cfg.NATSURL)
 	if err != nil {

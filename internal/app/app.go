@@ -12,9 +12,10 @@ import (
 	goodshandler "github.com/romanpitatelev/hezzl-goods/internal/controller/rest/goods-handler"
 	"github.com/romanpitatelev/hezzl-goods/internal/nats/consumer"
 	"github.com/romanpitatelev/hezzl-goods/internal/nats/producer"
+	"github.com/romanpitatelev/hezzl-goods/internal/repository/clickhouse"
 	goodsrepo "github.com/romanpitatelev/hezzl-goods/internal/repository/goods-repo"
+	"github.com/romanpitatelev/hezzl-goods/internal/repository/postgres"
 	"github.com/romanpitatelev/hezzl-goods/internal/repository/redis"
-	"github.com/romanpitatelev/hezzl-goods/internal/repository/store"
 	goodsservice "github.com/romanpitatelev/hezzl-goods/internal/usecase/goods-service"
 	"github.com/rs/zerolog"
 	"github.com/rs/zerolog/log"
@@ -33,7 +34,7 @@ func Run(cfg *configs.Config) error {
 
 	log.Level(level)
 
-	db, err := store.New(ctx, store.Config{Dsn: cfg.PostgresDSN})
+	db, err := postgres.New(ctx, postgres.Config{Dsn: cfg.PostgresDSN})
 	if err != nil {
 		log.Panic().Err(err).Msg("failed to connect to database")
 	}
@@ -44,7 +45,7 @@ func Run(cfg *configs.Config) error {
 
 	log.Info().Msg("successful Postgres migration")
 
-	clickHouseStore, err := store.NewClickHouse(ctx, cfg.ClickHouseDSN)
+	clickHouseStore, err := clickhouse.New(ctx, clickhouse.Config{Dsn: cfg.ClickHouseDSN})
 	if err != nil {
 		log.Panic().Err(err).Msg("failed to connect to ClickHouse")
 	}

@@ -8,7 +8,7 @@ import (
 
 	"github.com/nats-io/nats.go"
 	"github.com/romanpitatelev/hezzl-goods/internal/entity"
-	"github.com/romanpitatelev/hezzl-goods/internal/repository/store"
+	"github.com/romanpitatelev/hezzl-goods/internal/repository/clickhouse"
 	"github.com/rs/zerolog/log"
 )
 
@@ -18,14 +18,14 @@ const (
 )
 
 type NATSConsumer struct {
-	clickhouseStore *store.ClickHouseStore
+	clickhouseStore *clickhouse.Store
 	natsConn        *nats.Conn
 	batch           []entity.GoodLog
 	batchSize       int
 	batchMutex      sync.Mutex
 }
 
-func New(natsConn *nats.Conn, clickhouseStore *store.ClickHouseStore) *NATSConsumer {
+func New(natsConn *nats.Conn, clickhouseStore *clickhouse.Store) *NATSConsumer {
 	nc := &NATSConsumer{
 		clickhouseStore: clickhouseStore,
 		natsConn:        natsConn,

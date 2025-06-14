@@ -7,14 +7,14 @@ import (
 
 	"github.com/jackc/pgx/v5"
 	"github.com/romanpitatelev/hezzl-goods/internal/entity"
-	"github.com/romanpitatelev/hezzl-goods/internal/repository/store"
+	"github.com/romanpitatelev/hezzl-goods/internal/repository/postgres"
 )
 
 type Repo struct {
-	db *store.DataStore
+	db *postgres.DataStore
 }
 
-func New(db *store.DataStore) *Repo {
+func New(db *postgres.DataStore) *Repo {
 	return &Repo{
 		db: db,
 	}
@@ -26,7 +26,7 @@ func (r *Repo) CreateGood(ctx context.Context, projectID int, req entity.GoodCre
 		priority int
 	)
 
-	err := r.db.WithinTransaction(ctx, func(ctx context.Context, tx store.Transaction) error {
+	err := r.db.WithinTransaction(ctx, func(ctx context.Context, tx postgres.Transaction) error {
 		row := tx.QueryRow(ctx, `SELECT COALESCE(MAX(priority), 0) + 1 FROM goods`)
 		if err := row.Scan(&priority); err != nil {
 			return fmt.Errorf("failed to get max priority: %w", err)
@@ -96,7 +96,7 @@ WHERE id = $1 AND project_id = $2
 func (r *Repo) UpdateGood(ctx context.Context, id int, projectID int, goodUpdate entity.GoodUpdate) (entity.Good, error) {
 	var good entity.Good
 
-	err := r.db.WithinTransaction(ctx, func(ctx context.Context, tx store.Transaction) error {
+	err := r.db.WithinTransaction(ctx, func(ctx context.Context, tx postgres.Transaction) error {
 		queryCheck := `
 SELECT id FROM goods WHERE id = $1 AND project_id = $2 FOR UPDATE
 `
@@ -154,7 +154,7 @@ RETURNING id, project_id, name, COALESCE(description, ''), priority, removed, cr
 func (r *Repo) DeleteGood(ctx context.Context, id int, projectID int) (entity.GoodDeleteResponse, error) {
 	var response entity.GoodDeleteResponse
 
-	err := r.db.WithinTransaction(ctx, func(ctx context.Context, tx store.Transaction) error {
+	err := r.db.WithinTransaction(ctx, func(ctx context.Context, tx postgres.Transaction) error {
 		queryCheck := `
 SELECT id FROM goods WHERE id = $1 AND project_id = $2 FOR UPDATE
 `
@@ -204,7 +204,7 @@ func (r *Repo) GetGoods(ctx context.Context, request entity.ListRequest) ([]enti
 		goods []entity.Good
 	)
 
-	err := r.db.WithinTransaction(ctx, func(ctx context.Context, tx store.Transaction) error {
+	err := r.db.WithinTransaction(ctx, func(ctx context.Context, tx postgres.Transaction) error {
 		row := tx.QueryRow(ctx, `SELECT COUNT(*), COUNT(*) FILTER (WHERE removed = true) FROM goods`)
 
 		err := row.Scan(&meta.Total, &meta.Removed)
@@ -258,7 +258,7 @@ func (r *Repo) GetGoods(ctx context.Context, request entity.ListRequest) ([]enti
 func (r *Repo) Reprioritize(ctx context.Context, id int, projectID int, newPriority entity.PriorityRequest) ([]entity.Priority, error) {
 	var updatedPriorities []entity.Priority
 
-	err := r.db.WithinTransaction(ctx, func(ctx context.Context, tx store.Transaction) error {
+	err := r.db.WithinTransaction(ctx, func(ctx context.Context, tx postgres.Transaction) error {
 		currentPriority, err := r.getCurrentPriority(ctx, tx, id, projectID)
 		if err != nil {
 			return fmt.Errorf("error getting current priority: %w", err)
@@ -321,7 +321,7 @@ RETURNING id, priority
 	return updatedPriorities, nil
 }
 
-func (r *Repo) getCurrentPriority(ctx context.Context, tx store.Transaction, id, projectID int) (int, error) {
+func (r *Repo) getCurrentPriority(ctx context.Context, tx postgres.Transaction, id, projectID int) (int, error) {
 	var currentPriority int
 
 	row := tx.QueryRow(ctx,

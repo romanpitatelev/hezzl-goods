@@ -23,6 +23,8 @@ services:
     volumes:
       - clickhouse_data:/var/lib/clickhouse
     environment:
+      CLICKHOUSE_USER: user
+      CLICKHOUSE_PASSWORD: my_pass   
       CLICKHOUSE_DB: hezzl_logs
   nats:
     image: nats:2.11.4

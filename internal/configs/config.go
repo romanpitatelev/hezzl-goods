@@ -19,7 +19,7 @@ type Config struct {
 	BindAddress string `env:"BIND_ADDRESS" env-default:":8081" env-description:"Bind address"`
 	PostgresDSN string `env:"POSTGRES_DSN" env-default:"postgresql://postgres:my_pass@localhost:5432/hezzl_db" env-description:"PostgreSQL DSN"`
 
-	ClickHouseDSN      string `env:"CLICKHOUSE_DSN" env-default:"tcp://localhost:9000?database=hezzle_logs" env-description:"ClickHouse DSN"`
+	ClickHouseDSN      string `env:"CLICKHOUSE_DSN" env-default:"tcp://user:my_pass@localhost:9000?database=hezzl_logs" env-description:"ClickHouse DSN"`
 	ClickHouseDatabase string `env:"CLICKHOUSE_DATABASE" env-default:"hezzle_logs" env-description:"ClickHouse database name"`
 
 	NATSURL     string `env:"NATS_URL" env-default:"nats://localhost:4222"`
@@ -50,12 +50,12 @@ func (e *Config) getHelpString() (string, error) {
 func New() *Config {
 	cfg := &Config{}
 
-	helpString, err := cfg.getHelpString()
+	_, err := cfg.getHelpString()
 	if err != nil {
 		log.Panic().Err(err).Msg("failed to get help string")
 	}
 
-	log.Info().Msg(helpString)
+	// log.Info().Msg(helpString)
 
 	if findConfigFile() {
 		if err := cleanenv.ReadEnv(cfg); err != nil {

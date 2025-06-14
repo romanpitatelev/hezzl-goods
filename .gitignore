@@ -1,0 +1,7 @@
+/postgres-data
+.idea/
+.env
+c.out
+bin/
+coverage*
+.vscode/

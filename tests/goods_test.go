@@ -18,7 +18,9 @@ func (s *IntegrationTestSuite) TestCreateGood() {
 		path := goodsPath + "/create" + "?projectId=1"
 
 		var createdGood entity.Good
+
 		s.sendRequest(http.MethodPost, path, http.StatusOK, &good, &createdGood)
+
 		time.Sleep(100 * time.Millisecond)
 
 		s.Require().Equal(1, createdGood.ProjectID)
@@ -43,7 +45,9 @@ func (s *IntegrationTestSuite) TestCreateGood() {
 			}
 
 			var createdGood entity.Good
+
 			s.sendRequest(http.MethodPost, path, http.StatusOK, &good, &createdGood)
+
 			time.Sleep(100 * time.Millisecond)
 		}
 

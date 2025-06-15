@@ -114,12 +114,6 @@ func (s *IntegrationTestSuite) SetupSuite() {
 }
 
 func (s *IntegrationTestSuite) TearDownSuite() {
-	// err := s.clickhouseStore.Close()
-	// s.Require().NoError(err)
-
-	// err = s.redisClient.Close()
-	// s.Require().NoError(err)
-
 	s.cancelFunc()
 }
 

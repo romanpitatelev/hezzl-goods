@@ -52,7 +52,9 @@ func (nc *NATSConsumer) Start() error {
 			nc.batch = nc.batch[:0]
 
 			go func() {
-				nc.flushBatch(batchToFlush)
+				if err := nc.flushBatch(batchToFlush); err != nil {
+					log.Error().Err(err).Msg("failed to flush batch to ClickHouse")
+				}
 			}()
 		}
 	})
@@ -63,12 +65,7 @@ func (nc *NATSConsumer) Start() error {
 	return nil
 }
 
-//nolint:funlen
 func (nc *NATSConsumer) flushBatch(batch []entity.GoodLog) error {
-	if len(batch) == 0 {
-		return nil
-	}
-
 	tx, err := nc.clickhouseStore.DB().Begin()
 	if err != nil {
 		return fmt.Errorf("failed to begin transaction: %w", err)
@@ -89,7 +86,12 @@ func (nc *NATSConsumer) flushBatch(batch []entity.GoodLog) error {
 	if err != nil {
 		return fmt.Errorf("failed to prepare statement: %w", err)
 	}
-	defer stmt.Close()
+
+	defer func() {
+		if closeErr := stmt.Close(); closeErr != nil {
+			log.Error().Err(closeErr).Msg("failed to close statement")
+		}
+	}()
 
 	for _, logEntry := range batch {
 		_, err = stmt.Exec(
@@ -104,8 +106,9 @@ func (nc *NATSConsumer) flushBatch(batch []entity.GoodLog) error {
 		)
 		if err != nil {
 			if rollbackErr := tx.Rollback(); rollbackErr != nil {
-				return fmt.Errorf("exec error: %v, rollback error: %w", err, rollbackErr)
+				return fmt.Errorf("exec error: %w, rollback error: %w", err, rollbackErr)
 			}
+
 			return fmt.Errorf("failed to exec statement: %w", err)
 		}
 	}
@@ -115,5 +118,6 @@ func (nc *NATSConsumer) flushBatch(batch []entity.GoodLog) error {
 	}
 
 	log.Debug().Msgf("successfully flushed batch of %d logs to ClickHouse", len(batch))
+
 	return nil
 }

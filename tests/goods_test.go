@@ -2,6 +2,7 @@ package tests
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"net/http"
 	"time"
@@ -71,7 +72,69 @@ func (s *IntegrationTestSuite) TestCreateGood() {
 	})
 }
 
-func (s *IntegrationTestSuite) TestGetGood()    {}
+func (s *IntegrationTestSuite) TestGetGood() {
+	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Minute)
+	defer cancel()
+
+	good := entity.GoodCreateRequest{
+		Name: "test good",
+	}
+
+	path := goodsPath + "/create" + "?projectId=1"
+
+	var createdGood entity.Good
+	s.sendRequest(http.MethodPost, path, http.StatusOK, &good, &createdGood)
+
+	s.Run("get good successfully - good is cached in redis", func() {
+		pathGet := goodsPath + fmt.Sprintf("/get?id=%d&projectId=%d", createdGood.ID, createdGood.ProjectID)
+
+		var goodFound entity.Good
+		s.sendRequest(http.MethodGet, pathGet, http.StatusOK, nil, &goodFound)
+
+		cacheKey := fmt.Sprintf("good:%d:%d", goodFound.ID, goodFound.ProjectID)
+		cached, err := s.redisClient.Get(ctx, cacheKey)
+		s.Require().NoError(err)
+
+		var cachedGood entity.Good
+		err = json.Unmarshal([]byte(cached), &cachedGood)
+		s.Require().NoError(err)
+		s.Require().Equal(goodFound.ID, cachedGood.ID)
+		s.Require().Equal(goodFound.Priority, cachedGood.Priority)
+		s.Require().Equal(goodFound.Name, cachedGood.Name)
+	})
+
+	s.Run("get good successfully - good is not in redis after one minue", func() {
+		pathGet := goodsPath + fmt.Sprintf("/get?id=%d&projectId=%d", createdGood.ID, createdGood.ProjectID)
+
+		var goodFound entity.Good
+		s.sendRequest(http.MethodGet, pathGet, http.StatusOK, nil, &goodFound)
+
+		cacheKey := fmt.Sprintf("good:%d:%d", goodFound.ID, goodFound.ProjectID)
+
+		_, err := s.redisClient.Get(ctx, cacheKey)
+		s.Require().NoError(err, "cache should exist immediately afetr get")
+
+		expirationChecked := false
+		for start := time.Now(); time.Since(start) < 70*time.Second; {
+			ttl, err := s.redisClient.TTL(ctx, cacheKey)
+			if err != nil || ttl < 0 {
+				expirationChecked = true
+				break
+			}
+			time.Sleep(1 * time.Second)
+		}
+		s.Require().True(expirationChecked, "cache should expire within 60 seconds")
+
+		_, err = s.redisClient.Get(ctx, cacheKey)
+		s.Require().Error(err, "cache should be expired")
+	})
+
+	s.Run("good not found", func() {
+		pathGet := goodsPath + fmt.Sprintf("/get?id=%d&projectId=%d", 9999, createdGood.ProjectID)
+		s.sendRequest(http.MethodGet, pathGet, http.StatusNotFound, nil, nil)
+	})
+}
+
 func (s *IntegrationTestSuite) TestUpdateGood() {}
 func (s *IntegrationTestSuite) TestDeleteGood() {}
 func (s *IntegrationTestSuite) TestGetGoods()   {}

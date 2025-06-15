@@ -96,18 +96,14 @@ func (s *Service) GetGood(ctx context.Context, id int, projectID int) (entity.Go
 		return entity.Good{}, fmt.Errorf("failed to get good: %w", err)
 	}
 
-	go func(ctx context.Context) {
-		jsonData, err := json.Marshal(good)
-		if err != nil {
-			log.Warn().Err(err).Msg("failed to marshal good for caching")
+	jsonData, err := json.Marshal(good)
+	if err != nil {
+		return entity.Good{}, fmt.Errorf("failed to marshal good for caching: %w", err)
+	}
 
-			return
-		}
-
-		if err := s.redisClient.Set(ctx, cacheKey, jsonData, time.Minute); err != nil {
-			log.Warn().Err(err).Msg("failed to cache good")
-		}
-	}(ctx)
+	if err := s.redisClient.Set(ctx, cacheKey, jsonData, time.Minute); err != nil {
+		log.Warn().Err(err).Msg("failed to cache good")
+	}
 
 	logMsg := entity.GoodLog{
 		Operation:   "get",

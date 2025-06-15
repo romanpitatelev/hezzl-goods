@@ -1,6 +1,7 @@
 package producer
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
 
@@ -12,7 +13,7 @@ type NatsWrapper struct {
 	subject string
 }
 
-func New(conn *nats.Conn, subject string) *NatsWrapper {
+func New(ctx context.Context, conn *nats.Conn, subject string) *NatsWrapper {
 	return &NatsWrapper{
 		conn:    conn,
 		subject: subject,

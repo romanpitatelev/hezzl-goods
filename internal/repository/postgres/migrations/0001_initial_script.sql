@@ -9,7 +9,7 @@ CREATE TABLE projects
 CREATE TABLE goods
 (
     id SERIAL PRIMARY KEY,
-    project_id REFERENCES projects (id) NOT NULL,
+    project_id INTEGER REFERENCES projects (id) NOT NULL,
     name VARCHAR NOT NULL,
     description VARCHAR,
     priority NUMERIC NOT NULL,
@@ -30,7 +30,5 @@ DROP INDEX IF EXISTS idx_name;
 DROP INDEX IF EXISTS idx_project_id;
 DROP TABLE goods;
 DROP TABLE projects;
-DROP TABLE users;
-
 
 

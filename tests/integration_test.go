@@ -71,11 +71,6 @@ func (s *IntegrationTestSuite) SetupSuite() {
 	s.clickhouseStore, err = clickhouse.New(ctx, clickhouse.Config{Dsn: clickhouseDSN})
 	s.Require().NoError(err)
 
-	defer func() {
-		err := s.clickhouseStore.Close()
-		s.Require().NoError(err)
-	}()
-
 	err = s.clickhouseStore.Migrate(migrate.Up)
 	s.Require().NoError(err)
 
@@ -89,21 +84,16 @@ func (s *IntegrationTestSuite) SetupSuite() {
 
 	log.Info().Msg("successful connection to NATS")
 
-	s.natsClient = consumer.New(nc, s.clickhouseStore)
-	err = s.natsClient.Subscribe()
-	s.Require().NoError(err)
+	s.natsProducer = producer.New(ctx, nc, "goods.logs")
 
-	s.natsProducer = producer.New(nc, "goods.logs")
+	s.natsClient = consumer.New(ctx, nc, s.clickhouseStore)
+	err = s.natsClient.Start()
+	s.Require().NoError(err)
 
 	s.goodsrepo = goodsrepo.New(s.db)
 
 	s.redisClient, err = redis.New(ctx, redisAddr, redisPassword, redisDB)
 	s.Require().NoError(err)
-
-	defer func() {
-		err := s.redisClient.Close()
-		s.Require().NoError(err)
-	}()
 
 	s.goodsservice = goodsservice.New(s.goodsrepo, s.natsProducer, s.redisClient)
 
@@ -124,13 +114,18 @@ func (s *IntegrationTestSuite) SetupSuite() {
 }
 
 func (s *IntegrationTestSuite) TearDownSuite() {
+	// err := s.clickhouseStore.Close()
+	// s.Require().NoError(err)
+
+	// err = s.redisClient.Close()
+	// s.Require().NoError(err)
+
 	s.cancelFunc()
 }
 
 func (s *IntegrationTestSuite) TearDownTest() {
 	err := s.db.Truncate(context.Background(),
 		"goods",
-		"projects",
 	)
 	s.Require().NoError(err)
 

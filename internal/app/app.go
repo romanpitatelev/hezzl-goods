@@ -73,12 +73,12 @@ func Run(cfg *configs.Config) error {
 
 	log.Info().Msg("successful connection to NATS")
 
-	natsConsumer := consumer.New(nc, clickHouseStore)
-	if err := natsConsumer.Subscribe(); err != nil {
-		log.Panic().Err(err).Msg("failed to subscribe to NATS")
-	}
+	natsProducer := producer.New(ctx, nc, "goods.logs")
 
-	natsProducer := producer.New(nc, "goods.logs")
+	natsConsumer := consumer.New(ctx, nc, clickHouseStore)
+	if err := natsConsumer.Start(); err != nil {
+		log.Panic().Err(err).Msg("failed to start NATS")
+	}
 
 	goodsRepo := goodsrepo.New(db)
 

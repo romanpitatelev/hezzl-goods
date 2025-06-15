@@ -6,6 +6,7 @@ CREATE TABLE IF NOT EXISTS goods_logs
     description Nullable(String),
     priority UInt32,
     removed UInt8,
+    operation String,
     event_time DateTime DEFAULT now(),
 
     INDEX id_idx id TYPE minmax GRANULARITY 3,

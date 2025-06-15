@@ -76,14 +76,14 @@ func (c *Store) Migrate(direction migrate.MigrationDirection) error {
 	return nil
 }
 
-func (c *Store) Begin() (*sql.Tx, error) {
-	tx, err := c.db.Begin()
-	if err != nil {
-		return nil, fmt.Errorf("error starting ClickHouse: %w", err)
-	}
+// func (c *Store) Begin() (*sql.Tx, error) {
+// 	tx, err := c.db.Begin()
+// 	if err != nil {
+// 		return nil, fmt.Errorf("error starting ClickHouse: %w", err)
+// 	}
 
-	return tx, nil
-}
+// 	return tx, nil
+// }
 
 func (c *Store) Close() error {
 	if err := c.db.Close(); err != nil {
@@ -117,4 +117,8 @@ func (c *Store) Truncate(ctx context.Context, tables ...string) error {
 	}
 
 	return nil
+}
+
+func (c *Store) DB() *sql.DB {
+	return c.db
 }

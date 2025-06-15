@@ -10,11 +10,9 @@ import (
 	"testing"
 	"time"
 
-	"github.com/golang-jwt/jwt/v5"
 	"github.com/nats-io/nats.go"
 	"github.com/romanpitatelev/hezzl-goods/internal/controller/rest"
 	goodshandler "github.com/romanpitatelev/hezzl-goods/internal/controller/rest/goods-handler"
-	"github.com/romanpitatelev/hezzl-goods/internal/entity"
 	"github.com/romanpitatelev/hezzl-goods/internal/nats/consumer"
 	"github.com/romanpitatelev/hezzl-goods/internal/nats/producer"
 	"github.com/romanpitatelev/hezzl-goods/internal/repository/clickhouse"
@@ -114,7 +112,6 @@ func (s *IntegrationTestSuite) SetupSuite() {
 	s.server = rest.New(
 		rest.Config{BindAddress: fmt.Sprintf(":%d", port)},
 		s.goodshandler,
-		rest.GetPublicKey(),
 	)
 
 	//nolint:testifylint
@@ -134,7 +131,6 @@ func (s *IntegrationTestSuite) TearDownTest() {
 	err := s.db.Truncate(context.Background(),
 		"goods",
 		"projects",
-		"users",
 	)
 	s.Require().NoError(err)
 
@@ -150,7 +146,7 @@ func TestIntegrationSetupSuite(t *testing.T) {
 	suite.Run(t, new(IntegrationTestSuite))
 }
 
-func (s *IntegrationTestSuite) sendRequest(method, path string, status int, entity, result any, user entity.UserInfo) {
+func (s *IntegrationTestSuite) sendRequest(method, path string, status int, entity, result any) {
 	body, err := json.Marshal(entity)
 	s.Require().NoError(err)
 
@@ -160,10 +156,6 @@ func (s *IntegrationTestSuite) sendRequest(method, path string, status int, enti
 	request, err := http.NewRequestWithContext(context.Background(), method,
 		fmt.Sprintf("http://localhost:%d%s", port, path), bytes.NewReader(body))
 	s.Require().NoError(err, "fail to create request")
-
-	token := s.getToken(user)
-
-	request.Header.Set("Authorization", "Bearer "+token)
 
 	client := http.Client{}
 
@@ -197,25 +189,4 @@ func (s *IntegrationTestSuite) sendRequest(method, path string, status int, enti
 
 	err = json.NewDecoder(response.Body).Decode(result)
 	s.Require().NoError(err)
-}
-
-func (s *IntegrationTestSuite) getToken(user entity.UserInfo) string {
-	now := time.Now()
-	claims := entity.Claims{
-		UserID: user.ID,
-		Email:  &user.Email,
-		Role:   &user.Role,
-		RegisteredClaims: jwt.RegisteredClaims{
-			ExpiresAt: jwt.NewNumericDate(now.Add(24 * time.Hour)),
-			IssuedAt:  jwt.NewNumericDate(now),
-		},
-	}
-
-	privateKey, err := readPrivateKey()
-	s.Require().NoError(err)
-
-	token, err := generateToken(&claims, privateKey)
-	s.Require().NoError(err)
-
-	return token
 }

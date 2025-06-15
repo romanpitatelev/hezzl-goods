@@ -1,12 +1,4 @@
 -- +migrate Up
-CREATE TABLE users 
-(
-    user_id UUID PRIMARY KEY,
-    email VARCHAR,
-    role VARCHAR,
-    deleted_at TIMESTAMP WITH TIME ZONE
-);
-
 CREATE TABLE projects
 (
     id SERIAL PRIMARY KEY,

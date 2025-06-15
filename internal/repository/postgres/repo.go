@@ -11,7 +11,6 @@ import (
 	"github.com/jackc/pgx/v5/pgconn"
 	"github.com/jackc/pgx/v5/pgxpool"
 	_ "github.com/jackc/pgx/v5/stdlib"
-	"github.com/romanpitatelev/hezzl-goods/internal/entity"
 	"github.com/rs/zerolog/log"
 	migrate "github.com/rubenv/sql-migrate"
 )
@@ -93,19 +92,6 @@ func (d *DataStore) Migrate(direction migrate.MigrationDirection) error {
 	_, err = migrate.Exec(conn, "postgres", asset, direction)
 	if err != nil {
 		return fmt.Errorf("failed to count the number of migrations: %w", err)
-	}
-
-	return nil
-}
-
-func (d *DataStore) UpsertUser(ctx context.Context, user entity.UserInfo) error {
-	query := `
-INSERT INTO users (id, email, role)
-VALUES ($1, $2, $3)`
-
-	_, err := d.pool.Exec(ctx, query, user.ID, user.Email, user.Role)
-	if err != nil {
-		return fmt.Errorf("failed to upsert user: %w", err)
 	}
 
 	return nil

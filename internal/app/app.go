@@ -100,7 +100,6 @@ func Run(cfg *configs.Config) error {
 	server := rest.New(
 		rest.Config{BindAddress: cfg.BindAddress},
 		goodsHandler,
-		rest.GetPublicKey(),
 	)
 
 	if err := server.Run(ctx); err != nil {

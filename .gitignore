@@ -5,3 +5,4 @@ c.out
 bin/
 coverage*
 .vscode/
+__debug_bin*

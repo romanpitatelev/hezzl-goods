@@ -46,11 +46,10 @@ func getStatusCode(err error) int {
 	switch {
 	case errors.Is(err, entity.ErrGoodNotFound):
 		return http.StatusNotFound
-	case errors.Is(err, entity.ErrInvalidToken):
-		return http.StatusUnauthorized
 	case errors.Is(err, entity.ErrInvalidIDOrProjectID) ||
 		errors.Is(err, entity.ErrEmptyName) ||
-		errors.Is(err, entity.ErrNegativePriority):
+		errors.Is(err, entity.ErrNegativePriority) ||
+		errors.Is(err, entity.ErrSamePriority):
 		return http.StatusBadRequest
 	default:
 		return http.StatusInternalServerError

@@ -1,15 +1,8 @@
 package entity
 
 import (
-	"encoding/json"
-	"fmt"
 	"time"
-
-	"github.com/golang-jwt/jwt/v5"
-	"github.com/google/uuid"
 )
-
-type UserID uuid.UUID
 
 type Project struct {
 	ID        int       `json:"id"`
@@ -75,22 +68,19 @@ type PriorityResponse struct {
 	Priorities []Priority `json:"priorities"`
 }
 
-type Claims struct {
-	UserID UserID  `json:"userId"`
-	Email  *string `json:"email"`
-	Role   *string `json:"role"`
-	jwt.RegisteredClaims
-}
-
-type UserInfo struct {
-	ID    UserID `json:"userId"`
-	Email string `json:"email"`
-	Role  string `json:"role"`
-}
-
 type ListRequest struct {
 	Limit  int
 	Offset int
+}
+
+func (l *ListRequest) Validate() {
+	if l.Limit <= 0 {
+		l.Limit = 10
+	}
+
+	if l.Offset < 0 {
+		l.Offset = 0
+	}
 }
 
 type Meta struct {
@@ -108,29 +98,4 @@ type GoodsListResponse struct {
 type URLParams struct {
 	ID        int `json:"id"`
 	ProjectID int `json:"projectId"`
-}
-
-func unmarshalUUID(id *uuid.UUID, data []byte) error {
-	var s string
-	if err := json.Unmarshal(data, &s); err != nil {
-		return fmt.Errorf("unmarshalling error: %w", err)
-	}
-
-	parsed, err := uuid.Parse(s)
-	if err != nil {
-		return ErrInvalidUUIDFormat
-	}
-
-	*id = parsed
-
-	return nil
-}
-
-func (u *UserID) UnmarshalText(data []byte) error {
-	return unmarshalUUID((*uuid.UUID)(u), data)
-}
-
-//nolint:wrapcheck
-func (u UserID) MarshalText() ([]byte, error) {
-	return json.Marshal(uuid.UUID(u).String())
 }

@@ -62,3 +62,18 @@ func (c *Client) Close() error {
 
 	return nil
 }
+
+func (c *Client) TTL(ctx context.Context, cacheKey string) (time.Duration, error) {
+	ttlCmd := c.client.TTL(ctx, cacheKey)
+
+	ttl, err := ttlCmd.Result()
+	if err != nil {
+		return 0, fmt.Errorf("redis TTL failed: %w", err)
+	}
+
+	if ttl == -2 {
+		return 0, redis.Nil
+	}
+
+	return ttl, nil
+}

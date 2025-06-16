@@ -1,45 +1,38 @@
 package consumer
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
 	"sync"
-	"time"
 
 	"github.com/nats-io/nats.go"
 	"github.com/romanpitatelev/hezzl-goods/internal/entity"
-	"github.com/romanpitatelev/hezzl-goods/internal/repository/store"
+	"github.com/romanpitatelev/hezzl-goods/internal/repository/clickhouse"
 	"github.com/rs/zerolog/log"
 )
 
 const (
-	defaultBatchSize = 100
-	defaultTimout    = 5 * time.Second
+	defaultBatchSize = 30
 )
 
 type NATSConsumer struct {
-	clickhouseStore *store.ClickHouseStore
+	clickhouseStore *clickhouse.Store
 	natsConn        *nats.Conn
 	batch           []entity.GoodLog
 	batchSize       int
 	batchMutex      sync.Mutex
 }
 
-func New(natsConn *nats.Conn, clickhouseStore *store.ClickHouseStore) *NATSConsumer {
-	nc := &NATSConsumer{
+func New(ctx context.Context, natsConn *nats.Conn, clickhouseStore *clickhouse.Store) *NATSConsumer {
+	return &NATSConsumer{
 		clickhouseStore: clickhouseStore,
 		natsConn:        natsConn,
 		batchSize:       defaultBatchSize,
 	}
-
-	go func() {
-		nc.processBatch(defaultTimout)
-	}()
-
-	return nc
 }
 
-func (nc *NATSConsumer) Subscribe() error {
+func (nc *NATSConsumer) Start() error {
 	_, err := nc.natsConn.Subscribe("goods.logs", func(msg *nats.Msg) {
 		var logMsg entity.GoodLog
 		if err := json.Unmarshal(msg.Data, &logMsg); err != nil {
@@ -53,95 +46,78 @@ func (nc *NATSConsumer) Subscribe() error {
 
 		nc.batch = append(nc.batch, logMsg)
 
-		if len(nc.batch) >= nc.batchSize {
-			if err := nc.flushBatch(); err != nil {
-				log.Warn().Err(err).Msg("failed to flush batch")
-			}
+		if len(nc.batch) >= defaultBatchSize {
+			batchToFlush := make([]entity.GoodLog, len(nc.batch))
+			copy(batchToFlush, nc.batch)
+			nc.batch = nc.batch[:0]
+
+			go func() {
+				if err := nc.flushBatch(batchToFlush); err != nil {
+					log.Error().Err(err).Msg("failed to flush batch to ClickHouse")
+				}
+			}()
 		}
 	})
 	if err != nil {
-		return fmt.Errorf("error in nats while subscribing: %w", err)
+		return fmt.Errorf("failed to start nats: %w", err)
 	}
 
 	return nil
 }
 
-func (nc *NATSConsumer) processBatch(d time.Duration) {
-	ticker := time.NewTicker(d)
-	for range ticker.C {
-		nc.batchMutex.Lock()
-		if len(nc.batch) > 0 {
-			if err := nc.flushBatch(); err != nil {
-				continue
-			}
-		}
-
-		nc.batchMutex.Unlock()
-	}
-}
-
-//nolint:funlen
-func (nc *NATSConsumer) flushBatch() error {
-	nc.batchMutex.Lock()
-	defer nc.batchMutex.Unlock()
-
-	if len(nc.batch) == 0 {
-		return nil
-	}
-
-	tx, err := nc.clickhouseStore.Begin()
+func (nc *NATSConsumer) flushBatch(batch []entity.GoodLog) error {
+	tx, err := nc.clickhouseStore.DB().Begin()
 	if err != nil {
-		log.Warn().Err(err).Msg("failed to begin clickhouse")
-
-		return fmt.Errorf("failed to begin clickhouse: %w", err)
+		return fmt.Errorf("failed to begin transaction: %w", err)
 	}
 
-	defer func() {
-		if err = tx.Rollback(); err != nil {
-			log.Warn().Err(err).Msg("failed to rollback transaction in nats consumer")
-		}
-	}()
-
-	query := `
-INSERT INTO goods_logs (id, project_id, name, description, priority, removed, event_time, operation) 
-VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
-
-`
-
-	stmt, err := tx.Prepare(query)
+	stmt, err := tx.Prepare(`
+        INSERT INTO goods_logs (
+            id, 
+            project_id, 
+            name, 
+            description, 
+            priority, 
+            removed, 
+            operation, 
+            event_time
+        ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
+    `)
 	if err != nil {
 		return fmt.Errorf("failed to prepare statement: %w", err)
 	}
 
 	defer func() {
-		if err := stmt.Close(); err != nil {
-			log.Warn().Err(err).Msg("error closing statement")
+		if closeErr := stmt.Close(); closeErr != nil {
+			log.Error().Err(closeErr).Msg("failed to close statement")
 		}
 	}()
 
-	for _, logMsg := range nc.batch {
+	for _, logEntry := range batch {
 		_, err = stmt.Exec(
-			logMsg.GoodID,
-			logMsg.ProjectID,
-			logMsg.Name,
-			logMsg.Description,
-			logMsg.Priority,
-			logMsg.Removed,
-			logMsg.EventTime,
-			logMsg.Operation,
+			logEntry.GoodID,
+			logEntry.ProjectID,
+			logEntry.Name,
+			logEntry.Description,
+			logEntry.Priority,
+			logEntry.Removed,
+			logEntry.Operation,
+			logEntry.EventTime,
 		)
 		if err != nil {
-			log.Warn().Err(err).Msg("failed to insert log (continuing batch)")
+			if rollbackErr := tx.Rollback(); rollbackErr != nil {
+				return fmt.Errorf("exec error: %w, rollback error: %w", err, rollbackErr)
+			}
 
-			continue
+			return fmt.Errorf("failed to exec statement: %w", err)
 		}
 	}
 
-	if err = tx.Commit(); err != nil {
+	if err := tx.Commit(); err != nil {
 		return fmt.Errorf("failed to commit transaction: %w", err)
 	}
 
-	nc.batch = nil
+	log.Debug().Msgf("successfully flushed batch of %d logs to ClickHouse", len(batch))
 
 	return nil
 }

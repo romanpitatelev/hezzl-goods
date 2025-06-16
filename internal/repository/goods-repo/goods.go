@@ -7,14 +7,14 @@ import (
 
 	"github.com/jackc/pgx/v5"
 	"github.com/romanpitatelev/hezzl-goods/internal/entity"
-	"github.com/romanpitatelev/hezzl-goods/internal/repository/store"
+	"github.com/romanpitatelev/hezzl-goods/internal/repository/postgres"
 )
 
 type Repo struct {
-	db *store.DataStore
+	db *postgres.DataStore
 }
 
-func New(db *store.DataStore) *Repo {
+func New(db *postgres.DataStore) *Repo {
 	return &Repo{
 		db: db,
 	}
@@ -26,7 +26,7 @@ func (r *Repo) CreateGood(ctx context.Context, projectID int, req entity.GoodCre
 		priority int
 	)
 
-	err := r.db.WithinTransaction(ctx, func(ctx context.Context, tx store.Transaction) error {
+	err := r.db.WithinTransaction(ctx, func(ctx context.Context, tx postgres.Transaction) error {
 		row := tx.QueryRow(ctx, `SELECT COALESCE(MAX(priority), 0) + 1 FROM goods`)
 		if err := row.Scan(&priority); err != nil {
 			return fmt.Errorf("failed to get max priority: %w", err)
@@ -96,7 +96,7 @@ WHERE id = $1 AND project_id = $2
 func (r *Repo) UpdateGood(ctx context.Context, id int, projectID int, goodUpdate entity.GoodUpdate) (entity.Good, error) {
 	var good entity.Good
 
-	err := r.db.WithinTransaction(ctx, func(ctx context.Context, tx store.Transaction) error {
+	err := r.db.WithinTransaction(ctx, func(ctx context.Context, tx postgres.Transaction) error {
 		queryCheck := `
 SELECT id FROM goods WHERE id = $1 AND project_id = $2 FOR UPDATE
 `
@@ -116,7 +116,7 @@ UPDATE goods
 SET name = $1,
 	description = COALESCE($2, description)
 WHERE id = $3 AND project_id = $4
-RETURNING id, project_id, name, COALESCE(description, ''), priority, removed, created_at)		
+RETURNING id, project_id, name, COALESCE(description, ''), priority, removed, created_at		
 `
 		row = tx.QueryRow(ctx, queryUpdate,
 			goodUpdate.Name,
@@ -125,7 +125,7 @@ RETURNING id, project_id, name, COALESCE(description, ''), priority, removed, cr
 			projectID,
 		)
 
-		err := row.Scan(
+		if err := row.Scan(
 			&good.ID,
 			&good.ProjectID,
 			&good.Name,
@@ -133,8 +133,7 @@ RETURNING id, project_id, name, COALESCE(description, ''), priority, removed, cr
 			&good.Priority,
 			&good.Removed,
 			&good.CreatedAt,
-		)
-		if err != nil {
+		); err != nil {
 			return fmt.Errorf("failed to scan updated good: %w", err)
 		}
 
@@ -154,7 +153,7 @@ RETURNING id, project_id, name, COALESCE(description, ''), priority, removed, cr
 func (r *Repo) DeleteGood(ctx context.Context, id int, projectID int) (entity.GoodDeleteResponse, error) {
 	var response entity.GoodDeleteResponse
 
-	err := r.db.WithinTransaction(ctx, func(ctx context.Context, tx store.Transaction) error {
+	err := r.db.WithinTransaction(ctx, func(ctx context.Context, tx postgres.Transaction) error {
 		queryCheck := `
 SELECT id FROM goods WHERE id = $1 AND project_id = $2 FOR UPDATE
 `
@@ -204,7 +203,7 @@ func (r *Repo) GetGoods(ctx context.Context, request entity.ListRequest) ([]enti
 		goods []entity.Good
 	)
 
-	err := r.db.WithinTransaction(ctx, func(ctx context.Context, tx store.Transaction) error {
+	err := r.db.WithinTransaction(ctx, func(ctx context.Context, tx postgres.Transaction) error {
 		row := tx.QueryRow(ctx, `SELECT COUNT(*), COUNT(*) FILTER (WHERE removed = true) FROM goods`)
 
 		err := row.Scan(&meta.Total, &meta.Removed)
@@ -255,61 +254,62 @@ func (r *Repo) GetGoods(ctx context.Context, request entity.ListRequest) ([]enti
 }
 
 //nolint:funlen
-func (r *Repo) Reprioritize(ctx context.Context, id int, projectID int, newPriority entity.PriorityRequest) ([]entity.Priority, error) {
+func (r *Repo) Reprioritize(ctx context.Context, id int, projectID int, req entity.PriorityRequest) ([]entity.Priority, error) {
 	var updatedPriorities []entity.Priority
 
-	err := r.db.WithinTransaction(ctx, func(ctx context.Context, tx store.Transaction) error {
+	err := r.db.WithinTransaction(ctx, func(ctx context.Context, tx postgres.Transaction) error {
 		currentPriority, err := r.getCurrentPriority(ctx, tx, id, projectID)
 		if err != nil {
 			return fmt.Errorf("error getting current priority: %w", err)
 		}
 
-		if currentPriority == newPriority.NewPriority {
-			updatedPriorities = append(updatedPriorities, entity.Priority{
-				ID:       id,
-				Priority: newPriority.NewPriority,
-			})
+		newPriority := req.NewPriority
 
-			return nil
+		if currentPriority == newPriority {
+			return entity.ErrSamePriority
 		}
 
-		var updateQuery string
-		if newPriority.NewPriority < currentPriority {
-			updateQuery = `
+		if newPriority < currentPriority {
+			updateQuery := `
 UPDATE goods
 SET priority = priority + 1
-WHERE priority > $1 AND priority <= $2
+WHERE TRUE
+	AND project_id = $1
+	AND priority >= $2 
+	AND priority < $3
+	AND id != $4
 RETURNING id, priority
 `
-		}
 
-		rows, err := tx.Query(ctx, updateQuery, newPriority.NewPriority, currentPriority)
-		if err != nil {
-			return fmt.Errorf("failed to update priorities: %w", err)
-		}
-		defer rows.Close()
-
-		for rows.Next() {
-			var p entity.Priority
-			if err := rows.Scan(&p.ID, &p.Priority); err != nil {
-				return fmt.Errorf("failed to scan updated priority: %w", err)
+			rows, err := tx.Query(ctx, updateQuery, projectID, newPriority, currentPriority, id)
+			if err != nil {
+				return fmt.Errorf("failed to update priorities: %w", err)
 			}
 
-			updatedPriorities = append(updatedPriorities, p)
+			defer rows.Close()
+
+			for rows.Next() {
+				var p entity.Priority
+				if err := rows.Scan(&p.ID, &p.Priority); err != nil {
+					return fmt.Errorf("failed to scan updated priority: %w", err)
+				}
+
+				updatedPriorities = append(updatedPriorities, p)
+			}
 		}
 
 		_, err = tx.Exec(ctx, `
 			UPDATE goods
 			SET priority = $1
 			WHERE id = $2 AND project_id = $3`,
-			newPriority.NewPriority, id, projectID)
+			newPriority, id, projectID)
 		if err != nil {
 			return fmt.Errorf("failed to update target priority: %w", err)
 		}
 
 		updatedPriorities = append(updatedPriorities, entity.Priority{
 			ID:       id,
-			Priority: newPriority.NewPriority,
+			Priority: newPriority,
 		})
 
 		return nil
@@ -321,7 +321,7 @@ RETURNING id, priority
 	return updatedPriorities, nil
 }
 
-func (r *Repo) getCurrentPriority(ctx context.Context, tx store.Transaction, id, projectID int) (int, error) {
+func (r *Repo) getCurrentPriority(ctx context.Context, tx postgres.Transaction, id, projectID int) (int, error) {
 	var currentPriority int
 
 	row := tx.QueryRow(ctx,

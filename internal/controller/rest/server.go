@@ -2,7 +2,6 @@ package rest
 
 import (
 	"context"
-	"crypto/rsa"
 	"errors"
 	"fmt"
 	"net/http"
@@ -26,7 +25,6 @@ type Server struct {
 	cfg          Config
 	server       *http.Server
 	goodsHandler goodsHandler
-	key          *rsa.PublicKey
 }
 
 type goodsHandler interface {
@@ -41,7 +39,6 @@ type goodsHandler interface {
 func New(
 	cfg Config,
 	goodsHandler goodsHandler,
-	key *rsa.PublicKey,
 ) *Server {
 	router := chi.NewRouter()
 	s := &Server{
@@ -52,13 +49,11 @@ func New(
 			ReadHeaderTimeout: readHeaderTimeoutValue,
 		},
 		goodsHandler: goodsHandler,
-		key:          key,
 	}
 
 	router.Route("/api", func(r chi.Router) {
 		r.Route("/v1", func(r chi.Router) {
 			r.Use(middleware.Recoverer)
-			r.Use(s.jwtAuth)
 
 			r.Post("/good/create", s.goodsHandler.CreateGood)
 			r.Get("/good/get", s.goodsHandler.GetGood)

@@ -40,3 +40,8 @@ make run
 ```bash
 make test
 ```
+
+5. Create Docker image
+```bash
+make image
+```

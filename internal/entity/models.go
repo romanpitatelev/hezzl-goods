@@ -73,6 +73,16 @@ type ListRequest struct {
 	Offset int
 }
 
+func (l *ListRequest) Validate() {
+	if l.Limit <= 0 {
+		l.Limit = 10
+	}
+
+	if l.Offset < 0 {
+		l.Offset = 0
+	}
+}
+
 type Meta struct {
 	Total   int `json:"total"`
 	Removed int `json:"removed"`

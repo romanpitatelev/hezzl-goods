@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"net/http"
+	"sort"
 	"time"
 
 	"github.com/redis/go-redis/v9"
@@ -21,7 +22,7 @@ func (s *IntegrationTestSuite) TestCreateGood() {
 
 		var createdGood entity.Good
 
-		s.sendRequest(http.MethodPost, path, http.StatusOK, &good, &createdGood)
+		s.sendRequest(http.MethodPost, path, http.StatusCreated, &good, &createdGood)
 
 		time.Sleep(100 * time.Millisecond)
 
@@ -48,7 +49,7 @@ func (s *IntegrationTestSuite) TestCreateGood() {
 
 			var createdGood entity.Good
 
-			s.sendRequest(http.MethodPost, path, http.StatusOK, &good, &createdGood)
+			s.sendRequest(http.MethodPost, path, http.StatusCreated, &good, &createdGood)
 
 			time.Sleep(100 * time.Millisecond)
 		}
@@ -71,6 +72,18 @@ func (s *IntegrationTestSuite) TestCreateGood() {
 
 		s.sendRequest(http.MethodPost, path, http.StatusBadRequest, &good, nil)
 	})
+
+	s.Run("create good with negative project id", func() {
+		description := "nice good"
+		good := entity.GoodCreateRequest{
+			Name:        "negative project id",
+			Description: &description,
+		}
+
+		path := goodsPath + "/create" + "?projectId=-20"
+
+		s.sendRequest(http.MethodPost, path, http.StatusBadRequest, &good, nil)
+	})
 }
 
 func (s *IntegrationTestSuite) TestGetGood() {
@@ -84,7 +97,7 @@ func (s *IntegrationTestSuite) TestGetGood() {
 	path := goodsPath + "/create" + "?projectId=1"
 
 	var createdGood entity.Good
-	s.sendRequest(http.MethodPost, path, http.StatusOK, &good, &createdGood)
+	s.sendRequest(http.MethodPost, path, http.StatusCreated, &good, &createdGood)
 
 	s.Run("get good successfully - good is cached in redis", func() {
 		pathGet := goodsPath + fmt.Sprintf("/get?id=%d&projectId=%d", createdGood.ID, createdGood.ProjectID)
@@ -145,7 +158,7 @@ func (s *IntegrationTestSuite) TestUpdateGood() {
 	path := goodsPath + "/create" + "?projectId=1"
 
 	var createdGood entity.Good
-	s.sendRequest(http.MethodPost, path, http.StatusOK, &good, &createdGood)
+	s.sendRequest(http.MethodPost, path, http.StatusCreated, &good, &createdGood)
 
 	s.Run("update good successfully", func() {
 		description := "some update description"
@@ -207,9 +220,128 @@ func (s *IntegrationTestSuite) TestUpdateGood() {
 		path := goodsPath + fmt.Sprintf("/update?id=%d&projectId=%d", 9999, createdGood.ProjectID)
 		s.sendRequest(http.MethodPatch, path, http.StatusNotFound, &updateReq, nil)
 	})
-
 }
 
-func (s *IntegrationTestSuite) TestDeleteGood() {}
-func (s *IntegrationTestSuite) TestGetGoods()   {}
-func (s *IntegrationTestSuite) TestPrioritize() {}
+func (s *IntegrationTestSuite) TestDeleteGood() {
+	good := entity.GoodCreateRequest{
+		Name: "test delete good",
+	}
+
+	path := goodsPath + "/create" + "?projectId=1"
+
+	var createdGood entity.Good
+	s.sendRequest(http.MethodPost, path, http.StatusCreated, &good, &createdGood)
+
+	s.Run("delete good successfully", func() {
+		pathDelete := goodsPath + fmt.Sprintf("/remove?id=%d&projectId=%d", createdGood.ID, createdGood.ProjectID)
+
+		var deleteResponse entity.GoodDeleteResponse
+		s.sendRequest(http.MethodDelete, pathDelete, http.StatusOK, nil, &deleteResponse)
+
+		s.Require().Equal(deleteResponse.ID, createdGood.ID)
+		s.Require().Equal(deleteResponse.CampaignID, createdGood.ProjectID)
+		s.Require().True(deleteResponse.Removed)
+	})
+}
+
+func (s *IntegrationTestSuite) TestGetGoods() {
+	path := goodsPath + "/create" + "?projectId=1"
+
+	for i := range 20 {
+		good := entity.GoodCreateRequest{
+			Name: fmt.Sprintf("one_%d", i),
+		}
+
+		var createdGood entity.Good
+
+		s.sendRequest(http.MethodPost, path, http.StatusCreated, &good, &createdGood)
+
+		time.Sleep(10 * time.Millisecond)
+	}
+
+	s.Run("get goods list successfully with default limit", func() {
+		path := "/api/v1/goods/list"
+		var response entity.GoodsListResponse
+		s.sendRequest(http.MethodGet, path, http.StatusOK, nil, &response)
+
+		s.Require().Len(response.Goods, 10)
+		s.Require().Equal(20, response.Meta.Total)
+	})
+
+	s.Run("get goods list successfully with custom limit", func() {
+		path := fmt.Sprintf("/api/v1/goods/list?limit=%d", 5)
+		var response entity.GoodsListResponse
+		s.sendRequest(http.MethodGet, path, http.StatusOK, nil, &response)
+
+		s.Require().Len(response.Goods, 5)
+		s.Require().Equal(20, response.Meta.Total)
+	})
+
+	s.Run("get goods with limit and offset", func() {
+		path := fmt.Sprintf("/api/v1/goods/list?limit=%d&offset=%d", 5, 7)
+		var response entity.GoodsListResponse
+		s.sendRequest(http.MethodGet, path, http.StatusOK, nil, &response)
+
+		s.Require().Len(response.Goods, 5)
+		s.Require().Equal(20, response.Meta.Total)
+		s.Require().Equal(7, response.Meta.Offset)
+	})
+}
+func (s *IntegrationTestSuite) TestReprioritize() {
+	path := goodsPath + "/create" + "?projectId=1"
+
+	var goods []entity.Good
+	for i := range 10 {
+		good := entity.GoodCreateRequest{
+			Name: fmt.Sprintf("one_%d", i),
+		}
+
+		var createdGood entity.Good
+
+		s.sendRequest(http.MethodPost, path, http.StatusCreated, &good, &createdGood)
+		goods = append(goods, createdGood)
+
+		time.Sleep(10 * time.Millisecond)
+	}
+
+	s.Run("reprioritize goods", func() {
+		targetGood := goods[2]
+		newPriority := 1
+
+		priorityRequest := entity.PriorityRequest{NewPriority: newPriority}
+
+		path := goodsPath + fmt.Sprintf("/reprioritize?id=%d&projectId=%d", targetGood.ID, targetGood.ProjectID)
+
+		var response entity.PriorityResponse
+		s.sendRequest(http.MethodPatch, path, http.StatusOK, &priorityRequest, &response)
+
+		s.Require().Len(response.Priorities, 3, "should update target and two affected goods")
+		sort.Slice(response.Priorities, func(i, j int) bool {
+			return response.Priorities[i].Priority < response.Priorities[j].Priority
+		})
+		s.Require().Equal(targetGood.ID, response.Priorities[0].ID)
+		s.Require().Equal(1, response.Priorities[0].Priority)
+	})
+
+	s.Run("reprioritize same priority", func() {
+		targetGood := goods[4]
+		newPriority := goods[4].Priority
+
+		priorityRequest := entity.PriorityRequest{NewPriority: newPriority}
+
+		path := goodsPath + fmt.Sprintf("/reprioritize?id=%d&projectId=%d", targetGood.ID, targetGood.ProjectID)
+
+		s.sendRequest(http.MethodPatch, path, http.StatusBadRequest, &priorityRequest, nil)
+	})
+
+	s.Run("new priority is below zero", func() {
+		targetGood := goods[4]
+		newPriority := -8
+
+		priorityRequest := entity.PriorityRequest{NewPriority: newPriority}
+
+		path := goodsPath + fmt.Sprintf("/reprioritize?id=%d&projectId=%d", targetGood.ID, targetGood.ProjectID)
+
+		s.sendRequest(http.MethodPatch, path, http.StatusBadRequest, &priorityRequest, nil)
+	})
+}

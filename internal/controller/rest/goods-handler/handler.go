@@ -55,7 +55,7 @@ func (h *Handler) CreateGood(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	common.OkResponse(w, http.StatusOK, createdGood)
+	common.OkResponse(w, http.StatusCreated, createdGood)
 }
 
 func (h *Handler) GetGood(w http.ResponseWriter, r *http.Request) {

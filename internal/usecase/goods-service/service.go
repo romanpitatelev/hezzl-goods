@@ -201,13 +201,7 @@ func (s *Service) DeleteGood(ctx context.Context, id int, projectID int) (entity
 }
 
 func (s *Service) GetGoods(ctx context.Context, request entity.ListRequest) (entity.GoodsListResponse, error) {
-	if request.Limit <= 0 {
-		request.Limit = 10
-	}
-
-	if request.Offset < 0 {
-		request.Offset = 0
-	}
+	request.Validate()
 
 	cacheKey := fmt.Sprintf("goods:list:%d:%d", request.Limit, request.Offset)
 	cached, err := s.redisClient.Get(ctx, cacheKey)

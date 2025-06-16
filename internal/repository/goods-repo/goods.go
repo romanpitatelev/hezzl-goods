@@ -8,6 +8,7 @@ import (
 	"github.com/jackc/pgx/v5"
 	"github.com/romanpitatelev/hezzl-goods/internal/entity"
 	"github.com/romanpitatelev/hezzl-goods/internal/repository/postgres"
+	"github.com/rs/zerolog/log"
 )
 
 type Repo struct {
@@ -254,7 +255,7 @@ func (r *Repo) GetGoods(ctx context.Context, request entity.ListRequest) ([]enti
 }
 
 //nolint:funlen
-func (r *Repo) Reprioritize(ctx context.Context, id int, projectID int, newPriority entity.PriorityRequest) ([]entity.Priority, error) {
+func (r *Repo) Reprioritize(ctx context.Context, id int, projectID int, req entity.PriorityRequest) ([]entity.Priority, error) {
 	var updatedPriorities []entity.Priority
 
 	err := r.db.WithinTransaction(ctx, func(ctx context.Context, tx postgres.Transaction) error {
@@ -263,52 +264,56 @@ func (r *Repo) Reprioritize(ctx context.Context, id int, projectID int, newPrior
 			return fmt.Errorf("error getting current priority: %w", err)
 		}
 
-		if currentPriority == newPriority.NewPriority {
-			updatedPriorities = append(updatedPriorities, entity.Priority{
-				ID:       id,
-				Priority: newPriority.NewPriority,
-			})
+		newPriority := req.NewPriority
 
-			return nil
+		log.Debug().Msgf("in goods.go in Reprioritize function after the line: 'newPriority := req.NewPriority' ")
+
+		log.Debug().Msgf("current priority is %d, new priority is %d", currentPriority, newPriority)
+
+		if currentPriority == newPriority {
+
+			return entity.ErrSamePriority
 		}
 
-		var updateQuery string
-		if newPriority.NewPriority < currentPriority {
-			updateQuery = `
+		if newPriority < currentPriority {
+			updateQuery := `
 UPDATE goods
 SET priority = priority + 1
-WHERE priority > $1 AND priority <= $2
+WHERE TRUE
+	AND project_id = $1
+	AND priority >= $2 
+	AND priority < $3
+	AND id != $4
 RETURNING id, priority
 `
-		}
-
-		rows, err := tx.Query(ctx, updateQuery, newPriority.NewPriority, currentPriority)
-		if err != nil {
-			return fmt.Errorf("failed to update priorities: %w", err)
-		}
-		defer rows.Close()
-
-		for rows.Next() {
-			var p entity.Priority
-			if err := rows.Scan(&p.ID, &p.Priority); err != nil {
-				return fmt.Errorf("failed to scan updated priority: %w", err)
+			rows, err := tx.Query(ctx, updateQuery, projectID, newPriority, currentPriority, id)
+			if err != nil {
+				return fmt.Errorf("failed to update priorities: %w", err)
 			}
+			defer rows.Close()
 
-			updatedPriorities = append(updatedPriorities, p)
+			for rows.Next() {
+				var p entity.Priority
+				if err := rows.Scan(&p.ID, &p.Priority); err != nil {
+					return fmt.Errorf("failed to scan updated priority: %w", err)
+				}
+
+				updatedPriorities = append(updatedPriorities, p)
+			}
 		}
 
 		_, err = tx.Exec(ctx, `
 			UPDATE goods
 			SET priority = $1
 			WHERE id = $2 AND project_id = $3`,
-			newPriority.NewPriority, id, projectID)
+			newPriority, id, projectID)
 		if err != nil {
 			return fmt.Errorf("failed to update target priority: %w", err)
 		}
 
 		updatedPriorities = append(updatedPriorities, entity.Priority{
 			ID:       id,
-			Priority: newPriority.NewPriority,
+			Priority: newPriority,
 		})
 
 		return nil

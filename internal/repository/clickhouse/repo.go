@@ -76,15 +76,6 @@ func (c *Store) Migrate(direction migrate.MigrationDirection) error {
 	return nil
 }
 
-// func (c *Store) Begin() (*sql.Tx, error) {
-// 	tx, err := c.db.Begin()
-// 	if err != nil {
-// 		return nil, fmt.Errorf("error starting ClickHouse: %w", err)
-// 	}
-
-// 	return tx, nil
-// }
-
 func (c *Store) Close() error {
 	if err := c.db.Close(); err != nil {
 		return fmt.Errorf("error closing ClickHouse: %w", err)

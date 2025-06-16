@@ -8,7 +8,6 @@ import (
 	"github.com/jackc/pgx/v5"
 	"github.com/romanpitatelev/hezzl-goods/internal/entity"
 	"github.com/romanpitatelev/hezzl-goods/internal/repository/postgres"
-	"github.com/rs/zerolog/log"
 )
 
 type Repo struct {
@@ -266,12 +265,7 @@ func (r *Repo) Reprioritize(ctx context.Context, id int, projectID int, req enti
 
 		newPriority := req.NewPriority
 
-		log.Debug().Msgf("in goods.go in Reprioritize function after the line: 'newPriority := req.NewPriority' ")
-
-		log.Debug().Msgf("current priority is %d, new priority is %d", currentPriority, newPriority)
-
 		if currentPriority == newPriority {
-
 			return entity.ErrSamePriority
 		}
 
@@ -286,10 +280,12 @@ WHERE TRUE
 	AND id != $4
 RETURNING id, priority
 `
+
 			rows, err := tx.Query(ctx, updateQuery, projectID, newPriority, currentPriority, id)
 			if err != nil {
 				return fmt.Errorf("failed to update priorities: %w", err)
 			}
+
 			defer rows.Close()
 
 			for rows.Next() {

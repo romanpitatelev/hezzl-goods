@@ -97,13 +97,15 @@ func (s *IntegrationTestSuite) TestGetGood() {
 	path := goodsPath + "/create" + "?projectId=1"
 
 	var createdGood entity.Good
+
 	s.sendRequest(http.MethodPost, path, http.StatusCreated, &good, &createdGood)
 
 	s.Run("get good successfully - good is cached in redis", func() {
 		pathGet := goodsPath + fmt.Sprintf("/get?id=%d&projectId=%d", createdGood.ID, createdGood.ProjectID)
 
 		var goodFound entity.Good
-		s.sendRequest(http.MethodGet, pathGet, http.StatusOK, nil, &goodFound)
+
+		s.sendRequest(http.MethodGet, pathGet, http.StatusOK, nil, &goodFound) //nolint:contextcheck
 
 		cacheKey := fmt.Sprintf("good:%d:%d", goodFound.ID, goodFound.ProjectID)
 		cached, err := s.redisClient.Get(ctx, cacheKey)
@@ -121,22 +123,27 @@ func (s *IntegrationTestSuite) TestGetGood() {
 		pathGet := goodsPath + fmt.Sprintf("/get?id=%d&projectId=%d", createdGood.ID, createdGood.ProjectID)
 
 		var goodFound entity.Good
-		s.sendRequest(http.MethodGet, pathGet, http.StatusOK, nil, &goodFound)
+
+		s.sendRequest(http.MethodGet, pathGet, http.StatusOK, nil, &goodFound) //nolint:contextcheck
 
 		cacheKey := fmt.Sprintf("good:%d:%d", goodFound.ID, goodFound.ProjectID)
 
 		_, err := s.redisClient.Get(ctx, cacheKey)
-		s.Require().NoError(err, "cache should exist immediately afetr get")
+		s.Require().NoError(err, "cache should exist immediately after get")
 
 		expirationChecked := false
+
 		for start := time.Now(); time.Since(start) < 70*time.Second; {
 			ttl, err := s.redisClient.TTL(ctx, cacheKey)
 			if err != nil || ttl < 0 {
 				expirationChecked = true
+
 				break
 			}
+
 			time.Sleep(1 * time.Second)
 		}
+
 		s.Require().True(expirationChecked, "cache should expire within 60 seconds")
 
 		_, err = s.redisClient.Get(ctx, cacheKey)
@@ -158,6 +165,7 @@ func (s *IntegrationTestSuite) TestUpdateGood() {
 	path := goodsPath + "/create" + "?projectId=1"
 
 	var createdGood entity.Good
+
 	s.sendRequest(http.MethodPost, path, http.StatusCreated, &good, &createdGood)
 
 	s.Run("update good successfully", func() {
@@ -168,7 +176,9 @@ func (s *IntegrationTestSuite) TestUpdateGood() {
 		}
 
 		path := goodsPath + fmt.Sprintf("/update?id=%d&projectId=%d", createdGood.ID, createdGood.ProjectID)
+
 		var updatedGood entity.Good
+
 		s.sendRequest(http.MethodPatch, path, http.StatusOK, &updateReq, &updatedGood)
 
 		s.Require().Equal(updateReq.Name, updatedGood.Name)
@@ -181,6 +191,7 @@ func (s *IntegrationTestSuite) TestUpdateGood() {
 		pathGet := goodsPath + fmt.Sprintf("/get?id=%d&projectId=%d", createdGood.ID, createdGood.ProjectID)
 
 		var goodFound entity.Good
+
 		s.sendRequest(http.MethodGet, pathGet, http.StatusOK, nil, &goodFound)
 
 		cacheKey := fmt.Sprintf("good:%d:%d", goodFound.ID, goodFound.ProjectID)
@@ -201,7 +212,9 @@ func (s *IntegrationTestSuite) TestUpdateGood() {
 		}
 
 		path := goodsPath + fmt.Sprintf("/update?id=%d&projectId=%d", createdGood.ID, createdGood.ProjectID)
+
 		var updatedGood entity.Good
+
 		s.sendRequest(http.MethodPatch, path, http.StatusOK, &updateReq, &updatedGood)
 
 		s.Require().Equal(updateReq.Name, updatedGood.Name)
@@ -230,12 +243,14 @@ func (s *IntegrationTestSuite) TestDeleteGood() {
 	path := goodsPath + "/create" + "?projectId=1"
 
 	var createdGood entity.Good
+
 	s.sendRequest(http.MethodPost, path, http.StatusCreated, &good, &createdGood)
 
 	s.Run("delete good successfully", func() {
 		pathDelete := goodsPath + fmt.Sprintf("/remove?id=%d&projectId=%d", createdGood.ID, createdGood.ProjectID)
 
 		var deleteResponse entity.GoodDeleteResponse
+
 		s.sendRequest(http.MethodDelete, pathDelete, http.StatusOK, nil, &deleteResponse)
 
 		s.Require().Equal(deleteResponse.ID, createdGood.ID)
@@ -261,7 +276,9 @@ func (s *IntegrationTestSuite) TestGetGoods() {
 
 	s.Run("get goods list successfully with default limit", func() {
 		path := "/api/v1/goods/list"
+
 		var response entity.GoodsListResponse
+
 		s.sendRequest(http.MethodGet, path, http.StatusOK, nil, &response)
 
 		s.Require().Len(response.Goods, 10)
@@ -270,7 +287,9 @@ func (s *IntegrationTestSuite) TestGetGoods() {
 
 	s.Run("get goods list successfully with custom limit", func() {
 		path := fmt.Sprintf("/api/v1/goods/list?limit=%d", 5)
+
 		var response entity.GoodsListResponse
+
 		s.sendRequest(http.MethodGet, path, http.StatusOK, nil, &response)
 
 		s.Require().Len(response.Goods, 5)
@@ -279,7 +298,9 @@ func (s *IntegrationTestSuite) TestGetGoods() {
 
 	s.Run("get goods with limit and offset", func() {
 		path := fmt.Sprintf("/api/v1/goods/list?limit=%d&offset=%d", 5, 7)
+
 		var response entity.GoodsListResponse
+
 		s.sendRequest(http.MethodGet, path, http.StatusOK, nil, &response)
 
 		s.Require().Len(response.Goods, 5)
@@ -287,10 +308,12 @@ func (s *IntegrationTestSuite) TestGetGoods() {
 		s.Require().Equal(7, response.Meta.Offset)
 	})
 }
+
 func (s *IntegrationTestSuite) TestReprioritize() {
 	path := goodsPath + "/create" + "?projectId=1"
 
-	var goods []entity.Good
+	goods := make([]entity.Good, 10)
+
 	for i := range 10 {
 		good := entity.GoodCreateRequest{
 			Name: fmt.Sprintf("one_%d", i),
@@ -299,7 +322,7 @@ func (s *IntegrationTestSuite) TestReprioritize() {
 		var createdGood entity.Good
 
 		s.sendRequest(http.MethodPost, path, http.StatusCreated, &good, &createdGood)
-		goods = append(goods, createdGood)
+		goods[i] = createdGood
 
 		time.Sleep(10 * time.Millisecond)
 	}
@@ -313,6 +336,7 @@ func (s *IntegrationTestSuite) TestReprioritize() {
 		path := goodsPath + fmt.Sprintf("/reprioritize?id=%d&projectId=%d", targetGood.ID, targetGood.ProjectID)
 
 		var response entity.PriorityResponse
+
 		s.sendRequest(http.MethodPatch, path, http.StatusOK, &priorityRequest, &response)
 
 		s.Require().Len(response.Priorities, 3, "should update target and two affected goods")

@@ -7,6 +7,7 @@ import (
 	"net/http"
 	"time"
 
+	"github.com/redis/go-redis/v9"
 	"github.com/romanpitatelev/hezzl-goods/internal/entity"
 )
 
@@ -127,6 +128,7 @@ func (s *IntegrationTestSuite) TestGetGood() {
 
 		_, err = s.redisClient.Get(ctx, cacheKey)
 		s.Require().Error(err, "cache should be expired")
+		s.Require().ErrorIs(err, redis.Nil)
 	})
 
 	s.Run("good not found", func() {
@@ -135,7 +137,79 @@ func (s *IntegrationTestSuite) TestGetGood() {
 	})
 }
 
-func (s *IntegrationTestSuite) TestUpdateGood() {}
+func (s *IntegrationTestSuite) TestUpdateGood() {
+	good := entity.GoodCreateRequest{
+		Name: "test update good",
+	}
+
+	path := goodsPath + "/create" + "?projectId=1"
+
+	var createdGood entity.Good
+	s.sendRequest(http.MethodPost, path, http.StatusOK, &good, &createdGood)
+
+	s.Run("update good successfully", func() {
+		description := "some update description"
+		updateReq := entity.GoodUpdate{
+			Name:        "updated-name",
+			Description: &description,
+		}
+
+		path := goodsPath + fmt.Sprintf("/update?id=%d&projectId=%d", createdGood.ID, createdGood.ProjectID)
+		var updatedGood entity.Good
+		s.sendRequest(http.MethodPatch, path, http.StatusOK, &updateReq, &updatedGood)
+
+		s.Require().Equal(updateReq.Name, updatedGood.Name)
+		s.Require().Equal(description, updatedGood.Description)
+	})
+
+	s.Run("update good and invalidate redis", func() {
+		ctx := context.Background()
+
+		pathGet := goodsPath + fmt.Sprintf("/get?id=%d&projectId=%d", createdGood.ID, createdGood.ProjectID)
+
+		var goodFound entity.Good
+		s.sendRequest(http.MethodGet, pathGet, http.StatusOK, nil, &goodFound)
+
+		cacheKey := fmt.Sprintf("good:%d:%d", goodFound.ID, goodFound.ProjectID)
+		cached, err := s.redisClient.Get(ctx, cacheKey)
+		s.Require().NoError(err)
+
+		var cachedGood entity.Good
+		err = json.Unmarshal([]byte(cached), &cachedGood)
+		s.Require().NoError(err)
+		s.Require().Equal(goodFound.ID, cachedGood.ID)
+		s.Require().Equal(goodFound.Priority, cachedGood.Priority)
+		s.Require().Equal(goodFound.Name, cachedGood.Name)
+
+		description := "new update description"
+		updateReq := entity.GoodUpdate{
+			Name:        "new-updated-name",
+			Description: &description,
+		}
+
+		path := goodsPath + fmt.Sprintf("/update?id=%d&projectId=%d", createdGood.ID, createdGood.ProjectID)
+		var updatedGood entity.Good
+		s.sendRequest(http.MethodPatch, path, http.StatusOK, &updateReq, &updatedGood)
+
+		s.Require().Equal(updateReq.Name, updatedGood.Name)
+		s.Require().Equal(description, updatedGood.Description)
+
+		_, err = s.redisClient.Get(ctx, cacheKey)
+		s.Require().Error(err, "cache should be invalidated")
+		s.Require().ErrorIs(err, redis.Nil)
+	})
+
+	s.Run("update good not found", func() {
+		updateReq := entity.GoodUpdate{
+			Name: "updated-name-not-found",
+		}
+
+		path := goodsPath + fmt.Sprintf("/update?id=%d&projectId=%d", 9999, createdGood.ProjectID)
+		s.sendRequest(http.MethodPatch, path, http.StatusNotFound, &updateReq, nil)
+	})
+
+}
+
 func (s *IntegrationTestSuite) TestDeleteGood() {}
 func (s *IntegrationTestSuite) TestGetGoods()   {}
 func (s *IntegrationTestSuite) TestPrioritize() {}

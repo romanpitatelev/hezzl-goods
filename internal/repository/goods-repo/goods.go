@@ -116,7 +116,7 @@ UPDATE goods
 SET name = $1,
 	description = COALESCE($2, description)
 WHERE id = $3 AND project_id = $4
-RETURNING id, project_id, name, COALESCE(description, ''), priority, removed, created_at)		
+RETURNING id, project_id, name, COALESCE(description, ''), priority, removed, created_at		
 `
 		row = tx.QueryRow(ctx, queryUpdate,
 			goodUpdate.Name,
@@ -125,7 +125,7 @@ RETURNING id, project_id, name, COALESCE(description, ''), priority, removed, cr
 			projectID,
 		)
 
-		err := row.Scan(
+		if err := row.Scan(
 			&good.ID,
 			&good.ProjectID,
 			&good.Name,
@@ -133,8 +133,7 @@ RETURNING id, project_id, name, COALESCE(description, ''), priority, removed, cr
 			&good.Priority,
 			&good.Removed,
 			&good.CreatedAt,
-		)
-		if err != nil {
+		); err != nil {
 			return fmt.Errorf("failed to scan updated good: %w", err)
 		}
 
